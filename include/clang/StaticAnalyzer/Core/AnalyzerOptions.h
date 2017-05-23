@@ -272,6 +272,21 @@ private:
   /// \sa shouldDisplayNotesAsEvents
   Optional<bool> DisplayNotesAsEvents;
 
+  /// \sa getCTUDir
+  Optional<StringRef> CTUDir;
+
+  /// \sa getCTUReparseOnDemand
+  Optional<StringRef> CTUReparseOnDemand;
+
+  /// \sa getCTUUseUSR
+  Optional<bool> CTUUseUSR;
+
+  /// \sa shouldReanalyzeXTUVisitedFns
+  Optional<bool> ReanalyzeXTUVisitedFns;
+
+  /// \sa shouldRecordCoverage
+  Optional<StringRef> CoverageExportDir;  
+
   /// A helper function that retrieves option for a given full-qualified
   /// checker name.
   /// Options for checkers can be specified via 'analyzer-config' command-line
@@ -547,6 +562,27 @@ public:
   /// This is controlled by the 'extra-notes-as-events' option, which defaults
   /// to false when unset.
   bool shouldDisplayNotesAsEvents();
+
+  /// Returns the directory containing the CTU related files.
+  StringRef getCTUDir();
+ 
+  /// When a compilation database is passed, the analyzer will compile the
+  /// translation units during the CTU analysis on demand instead of reading
+  /// the binary representations from disk.
+  StringRef getCTUReparseOnDemand();
+
+  /// When true is returned USRs will be used to cross reference functions
+  /// instead of the mangled names.
+  bool getCTUUseUSR();
+
+  /// Returns whether functions that were analyzed from another translation unit
+  /// should be reanalyzed again as top level in case it is not called in its
+  /// own translation unit.
+  bool shouldReanalyzeXTUVisitedFns();
+
+  /// Determines where the coverage info should be dumped to. The coverage
+  /// information is recorded on the basic block level granularity.
+  StringRef coverageExportDir();
 
 public:
   AnalyzerOptions() :

@@ -16,8 +16,13 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Analysis/ProgramPoint.h"
+#include "clang/Frontend/ASTUnit.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Index/USRGeneration.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicTypeMap.h"
+#include "clang/Tooling/JSONCompilationDatabase.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -354,6 +359,87 @@ void AnyFunctionCall::getInitialStackFrameContents(
   addParameterValuesToBindings(CalleeCtx, Bindings, SVB, *this,
                                D->parameters());
 }
+
+RuntimeDefinition AnyFunctionCall::getRuntimeDefinition() const {
+  const FunctionDecl *FD = getDecl();
+  // Note that the AnalysisDeclContext will have the FunctionDecl with
+  // the definition (if one exists).
+  if (!FD)
+    return RuntimeDefinition();
+
+  AnalysisDeclContext *AD =
+    getLocationContext()->getAnalysisDeclContext()->
+    getManager()->getContext(FD);
+  if (AD->getBody())
+    return RuntimeDefinition(AD->getDecl());
+
+  auto Engine = static_cast<ExprEngine *>(
+      getState()->getStateManager().getOwningEngine());
+  CompilerInstance &CI = Engine->getCompilerInstance();
+  AnalysisManager &AMgr = Engine->getAnalysisManager();
+
+  auto ASTLoader = [&](StringRef ASTFileName) {
+    IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
+    TextDiagnosticPrinter *DiagClient =
+        new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
+    IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
+    IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
+        new DiagnosticsEngine(DiagID, &*DiagOpts, DiagClient));
+    StringRef CompilationDatabasePath = AMgr.options.getCTUReparseOnDemand();
+    if (CompilationDatabasePath.empty()) {
+      return ASTUnit::LoadFromASTFile(
+          ASTFileName, CI.getPCHContainerOperations()->getRawReader(), Diags,
+          CI.getFileSystemOpts());
+    } else {
+      using namespace tooling;
+      std::string Error;
+      std::unique_ptr<JSONCompilationDatabase> CompDb =
+          JSONCompilationDatabase::loadFromFile(
+              CompilationDatabasePath, Error,
+              JSONCommandLineSyntax::AutoDetect);
+      if (!CompDb) {
+        llvm::errs() << Error << "\n";
+        return std::unique_ptr<ASTUnit>();
+      }
+      // FIXME: Actual filename needs to be passed instead of AST file name.
+      //        Right now it is the script's responsibility to create correct
+      //        mapping.
+      std::vector<CompileCommand> Cmds =
+          CompDb->getCompileCommands(ASTFileName);
+      std::vector<const char*> RawCmds;
+      // FIXME: Assume one file is compiled only once.
+      for(auto Cmd : Cmds[0].CommandLine) {
+        RawCmds.push_back(Cmd.c_str());
+      }
+      // FIXME: Set working directory?
+      return std::unique_ptr<ASTUnit>(ASTUnit::LoadFromCommandLine(
+          RawCmds.data(), RawCmds.data() + RawCmds.size(),
+          CI.getPCHContainerOperations(), Diags,
+          CI.getInvocation().GetResourcesPath(RawCmds[0], (void *)isCallback)));
+    }
+  };
+
+  const FunctionDecl *CTUDecl = nullptr;
+  if (AMgr.options.getCTUUseUSR()) {
+    CTUDecl = AD->getASTContext().getCTUDefinition(
+        FD, CI, AMgr.options.getCTUDir(),
+        [](const Decl *D) {
+          SmallString<128> DeclUSR;
+          bool Ret = index::generateUSRForDecl(D, DeclUSR);
+          assert(!Ret);
+          return DeclUSR.str().str();
+        },
+        CI.getDiagnostics(), ASTLoader);
+  } else {
+    CTUDecl = AD->getASTContext().getCTUDefinition(
+        FD, CI, AMgr.options.getCTUDir(),
+        [](const Decl *) { return std::string{}; }, CI.getDiagnostics(),
+        ASTLoader);
+  }
+
+  return RuntimeDefinition(CTUDecl);
+}
+
 
 bool AnyFunctionCall::argumentsMayEscape() const {
   if (CallEvent::argumentsMayEscape() || hasVoidPointerToNonConstArg())

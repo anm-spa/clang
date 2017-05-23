@@ -137,7 +137,8 @@ namespace clang {
                            bool Complain = true);
     bool IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
                            bool Complain = true);
-    bool IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToRecord);
+    bool IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToRecord,
+                           bool Complain = true);
     bool IsStructuralMatch(EnumConstantDecl *FromEC, EnumConstantDecl *ToEC);
     bool IsStructuralMatch(ClassTemplateDecl *From, ClassTemplateDecl *To);
     bool IsStructuralMatch(VarTemplateDecl *From, VarTemplateDecl *To);
@@ -247,6 +248,7 @@ namespace clang {
     Expr *VisitStmtExpr(StmtExpr *E);
     Expr *VisitUnaryOperator(UnaryOperator *E);
     Expr *VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *E);
+    Expr *VisitTypeTraitExpr(TypeTraitExpr *E);
     Expr *VisitBinaryOperator(BinaryOperator *E);
     Expr *VisitConditionalOperator(ConditionalOperator *E);
     Expr *VisitBinaryConditionalOperator(BinaryConditionalOperator *E);
@@ -1228,10 +1230,12 @@ bool ASTNodeImporter::IsStructuralMatch(VarDecl *FromVar, VarDecl *ToVar,
   return Ctx.IsStructurallyEquivalent(FromVar, ToVar);
 }
 
-bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum) {
+bool ASTNodeImporter::IsStructuralMatch(EnumDecl *FromEnum, EnumDecl *ToEnum,
+                                        bool Complain) {
   StructuralEquivalenceContext Ctx(Importer.getFromContext(),
                                    Importer.getToContext(),
-                                   Importer.getNonEquivalentDecls());
+                                   Importer.getNonEquivalentDecls(),
+                                   false, Complain);
   return Ctx.IsStructurallyEquivalent(FromEnum, ToEnum);
 }
 
@@ -1240,6 +1244,11 @@ bool ASTNodeImporter::IsStructuralMatch(EnumConstantDecl *FromEC,
 {
   const llvm::APSInt &FromVal = FromEC->getInitVal();
   const llvm::APSInt &ToVal = ToEC->getInitVal();
+
+  EnumDecl* ToDC = cast<EnumDecl>(ToEC->getDeclContext());
+  EnumDecl* FromDC = cast<EnumDecl>(FromEC->getDeclContext());
+  if(!IsStructuralMatch(FromDC, ToDC, false))
+    return false;
 
   return FromVal.isSigned() == ToVal.isSigned() &&
          FromVal.getBitWidth() == ToVal.getBitWidth() &&
@@ -1425,10 +1434,22 @@ Decl *ASTNodeImporter::VisitTypedefNameDecl(TypedefNameDecl *D, bool IsAlias) {
       if (!FoundDecls[I]->isInIdentifierNamespace(IDNS))
         continue;
       if (TypedefNameDecl *FoundTypedef =
-            dyn_cast<TypedefNameDecl>(FoundDecls[I])) {
-        if (Importer.IsStructurallyEquivalent(D->getUnderlyingType(),
-                                            FoundTypedef->getUnderlyingType()))
-          return Importer.Imported(D, FoundTypedef);
+              dyn_cast<TypedefNameDecl>(FoundDecls[I])) {
+        if (Importer.IsStructurallyEquivalent(
+                D->getUnderlyingType(), FoundTypedef->getUnderlyingType())) {
+          QualType OriginalUT = D->getUnderlyingType();
+          QualType FoundUT = FoundTypedef->getUnderlyingType();
+          // If the found definition is incomplete
+          // but it should be complete import
+          // FIXME: maybe this check should go into
+          // IsStructurallyEquivalent() function?
+          if (!OriginalUT->isIncompleteType() &&
+              FoundUT->isIncompleteType()) {
+            continue;
+          } else {
+            return Importer.Imported(D, FoundTypedef);
+          }
+        }
       }
 
       ConflictingDecls.push_back(FoundDecls[I]);
@@ -1616,7 +1637,7 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
   DeclarationName SearchName = Name;
   if (!SearchName && D->getTypedefNameForAnonDecl()) {
     SearchName = Importer.Import(D->getTypedefNameForAnonDecl()->getDeclName());
-    IDNS = Decl::IDNS_Ordinary;
+    IDNS |= Decl::IDNS_Ordinary;
   } else if (Importer.getToContext().getLangOpts().CPlusPlus)
     IDNS |= Decl::IDNS_Ordinary;
 
@@ -1645,9 +1666,8 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
       }
       
       if (RecordDecl *FoundRecord = dyn_cast<RecordDecl>(Found)) {
-        if (D->isAnonymousStructOrUnion() && 
-            FoundRecord->isAnonymousStructOrUnion()) {
-          // If both anonymous structs/unions are in a record context, make sure
+        if (!SearchName) {
+          // If both unnamed structs/unions are in a record context, make sure
           // they occur in the same location in the context records.
           if (Optional<unsigned> Index1 =
                   StructuralEquivalenceContext::findUntaggedStructOrUnionIndex(
@@ -1657,6 +1677,9 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
               if (*Index1 != *Index2)
                 continue;
             }
+          } else {
+            if(!IsStructuralMatch(D, FoundRecord, false))
+              continue;
           }
         }
 
@@ -1745,8 +1768,8 @@ Decl *ASTNodeImporter::VisitRecordDecl(RecordDecl *D) {
       D2 = D2CXX;
       D2->setAccess(D->getAccess());
     } else {
-      D2 = RecordDecl::Create(Importer.getToContext(), D->getTagKind(),
-                              DC, StartLoc, Loc, Name.getAsIdentifierInfo());
+      D2 = RecordDecl::Create(Importer.getToContext(), D->getTagKind(), DC,
+                              StartLoc, Loc, Name.getAsIdentifierInfo());
     }
     
     D2->setQualifierInfo(Importer.Import(D->getQualifierLoc()));
@@ -1838,6 +1861,8 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
   if (ToD)
     return ToD;
 
+  const FunctionDecl *FoundWithoutBody = nullptr;
+
   // Try to find a function in our own ("to") context with the same name, same
   // type, and in the same context as the function we're importing.
   if (!LexicalDC->isFunctionOrMethod()) {
@@ -1855,6 +1880,13 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
           if (Importer.IsStructurallyEquivalent(D->getType(), 
                                                 FoundFunction->getType())) {
             // FIXME: Actually try to merge the body and other attributes.
+            const FunctionDecl *FromBodyDecl = nullptr;
+            D->hasBody(FromBodyDecl);
+            if (D == FromBodyDecl && !FoundFunction->hasBody()) {
+              // This function is needed to merge completely.
+              FoundWithoutBody = FoundFunction;
+              break;
+            }
             return Importer.Imported(D, FoundFunction);
           }
 
@@ -2004,6 +2036,12 @@ Decl *ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     ToFunction->addDeclInternal(Parameters[I]);
   }
   ToFunction->setParams(Parameters);
+
+  if (FoundWithoutBody) {
+    auto *Recent = const_cast<FunctionDecl *>(
+          FoundWithoutBody->getMostRecentDecl());
+    ToFunction->setPreviousDecl(Recent);
+  }
 
   if (usedDifferentExceptionSpec) {
     // Update FunctionProtoType::ExtProtoInfo.
@@ -3958,12 +3996,16 @@ Stmt *ASTNodeImporter::VisitCaseStmt(CaseStmt *S) {
   Expr *ToRHS = Importer.Import(S->getRHS());
   if (!ToRHS && S->getRHS())
     return nullptr;
+  Stmt *SubStmt = Importer.Import(S->getSubStmt());
+  if (!SubStmt && S->getSubStmt())
+    return nullptr;
   SourceLocation ToCaseLoc = Importer.Import(S->getCaseLoc());
   SourceLocation ToEllipsisLoc = Importer.Import(S->getEllipsisLoc());
   SourceLocation ToColonLoc = Importer.Import(S->getColonLoc());
-  return new (Importer.getToContext()) CaseStmt(ToLHS, ToRHS,
-                                                ToCaseLoc, ToEllipsisLoc,
-                                                ToColonLoc);
+  CaseStmt *CS = new (Importer.getToContext())
+      CaseStmt(ToLHS, ToRHS, ToCaseLoc, ToEllipsisLoc, ToColonLoc);
+  CS->setSubStmt(SubStmt);
+  return CS;
 }
 
 Stmt *ASTNodeImporter::VisitDefaultStmt(DefaultStmt *S) {
@@ -4689,6 +4731,31 @@ Expr *ASTNodeImporter::VisitUnaryExprOrTypeTraitExpr(
                                           Importer.Import(E->getRParenLoc()));
 }
 
+Expr *ASTNodeImporter::VisitTypeTraitExpr(TypeTraitExpr *E) {
+  QualType T = Importer.Import(E->getType());
+  if (T.isNull())
+    return nullptr;
+
+  unsigned NumArgs = E->getNumArgs();
+  llvm::SmallVector<TypeSourceInfo *, 2> ToArgTypes(NumArgs);
+  for (unsigned AI = 0; AI != NumArgs; ++AI) {
+    TypeSourceInfo *FromArgType = E->getArg(AI);
+    TypeSourceInfo *ToArgType = Importer.Import(FromArgType);
+    if (!ToArgType && FromArgType)
+      return nullptr;
+    ToArgTypes[AI] = ToArgType;
+  }
+  TypeSourceInfo **ToArgTypesArray = new (Importer.getToContext())
+      TypeSourceInfo*[NumArgs];
+  for (unsigned AI = 0; AI != NumArgs; ++AI)
+    ToArgTypesArray[AI] = ToArgTypes[AI];
+
+  return TypeTraitExpr::Create(Importer.getToContext(), T,
+        Importer.Import(E->getLocStart()), E->getTrait(),
+        llvm::makeArrayRef(ToArgTypesArray, NumArgs),
+        Importer.Import(E->getLocEnd()), E->getValue());
+}
+
 Expr *ASTNodeImporter::VisitBinaryOperator(BinaryOperator *E) {
   QualType T = Importer.Import(E->getType());
   if (T.isNull())
@@ -5308,7 +5375,8 @@ Expr *ASTNodeImporter::VisitMemberExpr(MemberExpr *E) {
   if (!ToBase && E->getBase())
     return nullptr;
 
-  ValueDecl *ToMember = dyn_cast<ValueDecl>(Importer.Import(E->getMemberDecl()));
+  ValueDecl *ToMember = 
+    dyn_cast_or_null<ValueDecl>(Importer.Import(E->getMemberDecl()));
   if (!ToMember && E->getMemberDecl())
     return nullptr;
 
@@ -5913,7 +5981,10 @@ SourceLocation ASTImporter::Import(SourceLocation FromLoc) {
   // For now, map everything down to its file location, so that we
   // don't have to import macro expansions.
   // FIXME: Import macro expansions!
-  FromLoc = FromSM.getFileLoc(FromLoc);
+  // If the FromLoc refers to a location
+  // inside a macro definition, the invocation
+  // location of that macro is imported.
+  FromLoc = FromSM.getExpansionLoc(FromLoc);
   std::pair<FileID, unsigned> Decomposed = FromSM.getDecomposedLoc(FromLoc);
   SourceManager &ToSM = ToContext.getSourceManager();
   FileID ToFileID = Import(Decomposed.first);

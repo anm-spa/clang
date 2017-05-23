@@ -370,3 +370,35 @@ bool AnalyzerOptions::shouldDisplayNotesAsEvents() {
         getBooleanOption("notes-as-events", /*Default=*/false);
   return DisplayNotesAsEvents.getValue();
 }
+
+StringRef AnalyzerOptions::getCTUDir() {
+  if (!CTUDir.hasValue() || !llvm::sys::fs::is_directory(*CTUDir))
+    CTUDir = getOptionAsString("xtu-dir", "");
+  return CTUDir.getValue();
+}
+
+StringRef AnalyzerOptions::getCTUReparseOnDemand() {
+  if (!CTUReparseOnDemand.hasValue())
+    CTUReparseOnDemand = getOptionAsString("xtu-reparse", "");
+  return CTUReparseOnDemand.getValue();
+}
+
+bool AnalyzerOptions::getCTUUseUSR() {
+  if (!CTUUseUSR.hasValue())
+    CTUUseUSR = getBooleanOption("use-usr", false);
+  return CTUUseUSR.getValue();
+}
+
+bool AnalyzerOptions::shouldReanalyzeXTUVisitedFns() {
+  if (!ReanalyzeXTUVisitedFns.hasValue())
+    ReanalyzeXTUVisitedFns =
+        getBooleanOption("reanalyze-xtu-visited", /*Default=*/false);
+  return ReanalyzeXTUVisitedFns.getValue();
+}
+
+StringRef AnalyzerOptions::coverageExportDir() {
+  if (!CoverageExportDir.hasValue())
+    CoverageExportDir = getOptionAsString("record-coverage", /*Default=*/"");
+  return CoverageExportDir.getValue();
+}
+
