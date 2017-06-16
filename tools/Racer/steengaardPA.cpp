@@ -66,7 +66,7 @@ CSteensgaardPA(auto_ptr <CSteensgaardAnalysisBuilder> builder, CGenericProgram *
 
 void
 CSteensgaardPA::
-initPASolver(std::set<unsigned> &vars, std::set<fsignature *> &funcs)
+initPASolver(std::set<unsigned> &vars, std::set<FuncSignature *> &funcs)
 {
   unsigned key_size;
   _vars.insert(vars.begin(), vars.end());
@@ -119,7 +119,7 @@ initPASolver(std::set<unsigned> &vars, std::set<fsignature *> &funcs)
 
    // Create mappings f -> ref(i1,i2), i1 -> BOT and i2 -> lambda(..)(..) for
    // each variable v
-   for (std::set<fsignature *>::iterator funcit=funcs.begin(); funcit!=funcs.end(); ++funcit) {
+   for (std::set<FuncSignature *>::iterator funcit=funcs.begin(); funcit!=funcs.end(); ++funcit) {
       // Get the func and its actual parameters and
      int func_key = (*funcit)->fid;
      vector<unsigned> f_args = (*funcit)->params;
@@ -312,6 +312,32 @@ ProcessAssignAddrStmt(int e1, int e2)
       join(var1, e2);
    }
 }
+
+void
+CSteensgaardPA::
+ProcessAssignFunPtrAddrStmt(int e1, int e2)
+{
+   // Dereference the e1 and e2 variables
+   e1 = deref(e1);
+   e2 = deref(e2);
+
+   // Get the type of the e1 variable
+   CSteensgaardPAType * t1 = gettype(e1);
+   //t1->Print(&std::cout);    
+     // Downcast the type to a ref type
+   CSteensgaardPARefType * ref_t1 = static_cast<CSteensgaardPARefType *>(t1);
+   assert(ref_t1);
+   //ref_t1->Print(&std::cout);
+   // Get the integer representing the var
+   int func1 = deref(ref_t1->Func());
+   //cout<<"e1 ="<<e1<<" e2="<<e2<<"Ref t1 "<<func1<<"\n";
+   // Do a join if not equal
+   if(func1 != e2) {
+     // std::cout<<"addr join\n";
+      joinWithoutUnification(func1, e2);
+   }
+}
+
 
 // Handle stmts of type e1 := *e2
 void
@@ -777,6 +803,45 @@ BuildVarToVarsAndVarToLabelsPointToSets()
    }
 }
 
+std::set<unsigned> CSteensgaardPA::getPtsToFuncsWithPartialPA(unsigned var)
+{
+  set < unsigned >  lambda_refs;
+  int d_v = deref(var);
+    
+  // Get the type of the variable (it must be a ref)
+  CSteensgaardPAType * t = gettype(d_v);
+    
+    // Downcast the type to ref types
+  CSteensgaardPARefType * ref_t = static_cast<CSteensgaardPARefType *>(t);
+  assert(ref_t);
+
+    // Get the variable in the ref type
+  unsigned lam = ref_t->Func();
+
+    // Get the corresponding dereferenced variable
+  unsigned d_lam = deref(lam);
+
+  if(!gettype(d_lam)->IsBot())  // function pointer points to function
+    {
+      CSteensgaardPAType * d_lamt = gettype(d_lam);
+      CSteensgaardPARefType * d_lamref_t = static_cast<CSteensgaardPARefType *>(d_lamt);
+      assert(d_lamref_t);
+	 
+      unsigned lam2=d_lamref_t->Func();
+      unsigned lam_pointsto=deref(lam2);
+      if(gettype(lam_pointsto)->IsLambda()) {
+	lambda_refs.insert(d_lam);
+	set<unsigned>::iterator v;
+	FORALL(v, _funcs) {
+	  unsigned dv = deref(*v);
+	  if(dv==d_lam && *v!=d_lam) lambda_refs.insert(*v);
+	}  
+      }        
+    } 
+  return lambda_refs;
+}
+
+
 void
 CSteensgaardPA::
 BuildVarToFuncsPointToSets()
@@ -807,13 +872,30 @@ BuildVarToFuncsPointToSets()
       // Get the corresponding dereferenced variable
       int d_lam = deref(lam);
 
+      //cout<<"Var "<<*v<<" deref "<<d_v<<" lam "<<lam<<" d_lam "<<d_lam<<"\n";
       // Check if it is a lambda var
-      if(gettype(d_lam)->IsLambda()) {
+      if(gettype(d_lam)->IsLambda()) {   //direct function
          // Yes, insert the var in the lambda expressions set
+	//cout<<*v<<" points to "<<d_lam<<"\n";
          lambda_to_refs[d_lam].insert(*v);
       }
+      else if(!gettype(d_lam)->IsBot())  // function pointer points to function
+	{
+	  CSteensgaardPAType * d_lamt = gettype(d_lam);
+	  CSteensgaardPARefType * d_lamref_t = static_cast<CSteensgaardPARefType *>(d_lamt);
+	  assert(d_lamref_t);
+	 
+	  int lam2=d_lamref_t->Func();
+	 
+	  int lam_pointsto=deref(lam2);
+	 	   // Check if it is a lambda var
+	   if(gettype(lam_pointsto)->IsLambda()) {
+         // Yes, insert the var in the lambda expressions set
+	     //   cout<<*v<<" points to "<<lam_pointsto<<"\n";
+	     lambda_to_refs[lam_pointsto].insert(*v);
+	   }        
+	} 
    }
-
    // Go through all created maps, setting all func refs to point to
    // each other. However, we skip the possibility that functions can
    // point to vars or other functions. Also, we skip that function
@@ -837,10 +919,13 @@ BuildVarToFuncsPointToSets()
                   // current function pointer variable). Also, make sure that
                   // it refers to a function.
                   if((*t != *r) && (_funcs.find(*t) != _funcs.end()))
+		    {
                      rs_not_incl_r.insert(*t);
+		     //cout<<*r<<" points to "<<*t<<"\n";
+		    }
                }
                _var_to_funcs[*r] = rs_not_incl_r;
-            }
+	      }
          }
       }
    }
@@ -850,13 +935,15 @@ BuildVarToFuncsPointToSets()
 
 void
 CSteensgaardPA::
-PrintMapToSet(const map<unsigned, set<unsigned> > &x, ostream &o, const symTab<symIdentBase> *st) const
+PrintMapToSet(const map<unsigned, set<unsigned> > &x, ostream &o, const SymTab<SymBase> *st) const
 {
    for (map<unsigned, set<unsigned> >::const_iterator it=x.begin(); it!=x.end(); ++it) {
      if (st){
-       ValueDecl *val= (st->lookupSymb(it->first))->getVarDecl(); 
-       if(val) o << val->getNameAsString().c_str();
-       else o << "RETVAR";   // update later
+       if(ValueDecl *val= (st->lookupSymb(it->first))->getVarDecl()) 
+	 o << val->getNameAsString().c_str();
+       else if(FunctionDecl *fd=st->lookupSymb(it->first)->getFuncDecl())
+	 o<< fd->getNameInfo().getName().getAsString();
+       else o << "TVAR "<<it->first;   // update later
      }
 	 else
          o << it->first;
@@ -866,7 +953,10 @@ PrintMapToSet(const map<unsigned, set<unsigned> > &x, ostream &o, const symTab<s
         if (st){
 	  ValueDecl *val= (st->lookupSymb(*target_it))->getVarDecl();     
           if(val) o << val->getNameAsString().c_str();
-	  else o << "RETVAR";  //update later
+	  else if(FunctionDecl *fd=st->lookupSymb(*target_it)->getFuncDecl())
+	    o<< fd->getNameInfo().getName().getAsString();
+	  else
+	    o << "TVAR "<<*target_it;  //update later
 	}    
 	    else
             o << *target_it;
@@ -880,7 +970,7 @@ PrintMapToSet(const map<unsigned, set<unsigned> > &x, ostream &o, const symTab<s
 
 void
 CSteensgaardPA::
-PrintAsPointsToSets(const symTab<symIdentBase> *st, ostream &o) const
+PrintAsPointsToSets(const SymTab<SymBase> *st, ostream &o) const
 {
    o << "\n****** Data ******\n";
    PrintMapToSet(_var_to_vars, o, st);
@@ -1058,6 +1148,74 @@ join(int e1, int e2)
       assert(0);
    }
 }
+
+
+// Required for function pointer assignment.If type of both e1 and e2 are not Bot, we shall not unify as join
+void
+CSteensgaardPA::
+joinWithoutUnification(int e1, int e2)
+{
+   // To get the variables their forward references ending at
+   e1 = deref(e1);
+   e2 = deref(e2);
+
+   // To avoid unnneccessary work
+   if(e1 == e2) return;
+
+   // Get if e1 or e2 is bot
+   bool t1_is_bot = gettype(e1)->IsBot();
+   bool t2_is_bot = gettype(e2)->IsBot();
+
+   // If both are bots
+   if(t1_is_bot && t2_is_bot) {
+     //std::cout<<"Both bot \n";
+      // Set e1 to be a forw(e2) type
+      CSteensgaardPAForwType * new_e1_t = new CSteensgaardPAForwType(e2);
+      settype(e1, new_e1_t);
+      // Add all pending items of e1 to e2's pending items
+      _pending_vector[e2].insert(_pending_vector[e1].begin(), _pending_vector[e1].end());
+   } else if(t1_is_bot && !t2_is_bot) {
+     //std::cout<<"bot NotBot\n";    
+      // If e1 is bot but e2 is not bot
+      // Set e1 to be a forw(e2) type
+      CSteensgaardPAForwType * new_e1_t = new CSteensgaardPAForwType(e2);
+      settype(e1, new_e1_t);
+      // Join all e1's pending items with e2
+      set<unsigned> pv_e1 = _pending_vector[e1]; // note: deliberate deep copy
+      set<unsigned>::const_iterator p;
+      FORALL(p, pv_e1) {
+         join(*p, e2);
+      }
+   } else if(!t1_is_bot && t2_is_bot) {
+     //std::cout<<"not Bot bot \n";
+      // If e1 is not bot and e2 is not bot
+      // Set e2 to be a forw(e1) type
+      CSteensgaardPAForwType * new_e2_t = new CSteensgaardPAForwType(e1);
+      settype(e2, new_e2_t);
+      // Join all e2's pending items with e1
+      set<unsigned> pv_e2 = _pending_vector[e2]; // note: deliberate deep copy
+      set<unsigned>::const_iterator p;
+      FORALL(p, pv_e2) {
+         join(*p, e1);
+      }
+   } else if(!t1_is_bot && !t2_is_bot) {
+     //std::cout<<"Both not bot \n";
+      // Neither t1 or t2 is bot
+      // Unify the two types
+      auto_ptr<CSteensgaardPAType> e1_t(gettype(e1)->Copy());
+      CSteensgaardPAType * e2_t = gettype(e2);
+
+      // Set e1 to be a forw(e2) type (will remove e1_t)
+      CSteensgaardPAForwType * new_e1_t = new CSteensgaardPAForwType(e2);
+      settype(e1, new_e1_t);
+      //unify(e1_t.get(), e2_t);  // Not required
+   } else {
+      // We should not be able to get here
+      assert(0);
+   }
+}
+
+
 
 // Unconditional unify
 void

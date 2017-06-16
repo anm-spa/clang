@@ -5,8 +5,11 @@ using namespace llvm;
 
 typedef std::set<unsigned>::iterator SetIter; 
 typedef enum {RD,WR,RW} AccessType;
-typedef std::set<std::pair<unsigned,std::string> > VarsLoc;
-typedef std::set<std::pair<unsigned,std::string> >::iterator VarsLocIter;
+
+//.first is var represented as declared location, .second is location of access
+typedef std::set<std::pair<std::string,std::string> > VarsLoc;
+typedef std::set<std::pair<std::string,std::string> >::iterator VarsLocIter;
+
 // maps program location to Var accessed and pointing to the global
 typedef std::multimap<std::string,std::pair<std::string,std::string> > MapType; 
 
@@ -18,46 +21,75 @@ std::string printAccessType(AccessType acc)
 class GlobalVarHandler
 {
 private:
-  std::set<unsigned> globals;   // Set of all global Vars in a translation unit            
+  std::set<string> globals;   // Set of all global Vars in a translation unit            
+  std::map<unsigned,string> globalVarMap;
+  std::set<unsigned> globalVarId;
 
   // map.second is a set of pointer variables pointing to the global at map.first 
-  std::map<unsigned,std::set<unsigned> > varToVarsGlobals;  
+  //std::map<unsigned,std::set<unsigned> > varToVarsGlobals;  
 
   // set of all pointers pointing to globals
-  std::set<unsigned> pointerToGlobals;            
-  VarsLoc varsPtsToGlobalRead;
-  VarsLoc varsPtsToGlobalWrite;
+  // std::set<unsigned> pointerToGlobals;     // elements of this set are from the symbol table        
+  VarsLoc globalRead;
+  VarsLoc globalWrite;
   // locToVarPairMap.second.first points to locToVarPairMap.second.second at locToVarPairMap.first
   MapType locToVarPairMap;
 public:
   GlobalVarHandler(){}
   ~GlobalVarHandler(){}
-  void insert(unsigned var){ globals.insert(var);}
+  
+  void insert(unsigned var, string loc){ 
+    globals.insert(loc);
+    globalVarId.insert(var);
+    globalVarMap.insert(std::pair<unsigned,string>(var,loc));
+  }
+
+  
+  std::string getVarAsLoc(unsigned var)
+  {
+    // var should be from the globals set
+    auto it=globalVarMap.find(var);
+    if(it!=globalVarMap.end())
+      return (it->second);
+    else 
+      assert(0);   //execution should not reach here
+  }  
+  
+  /*
   void insertPtsToGv(const std::set<unsigned> &vars_pointed_to, unsigned globalVar)
   {
     pointerToGlobals.insert(vars_pointed_to.begin(),vars_pointed_to.end());
     varToVarsGlobals.insert(std::pair<unsigned, std::set<unsigned> >(globalVar,vars_pointed_to));
   }
+
+  */
   
-  SetIter gVarsBegin(){return globals.begin();}
+  SetIter gVarsBegin(){return globalVarId.begin();}
 
-  SetIter gVarsEnd(){return globals.end();}  
+  SetIter gVarsEnd(){return globalVarId.end();}  
 
-  bool isGv(unsigned p){ return globals.find(p)!=globals.end();}
+  bool isGv(unsigned p){ return globalVarId.find(p)!=globalVarId.end();}
 
+  /*
   bool isPtrToGv(unsigned p)
   { return (pointerToGlobals.find(p)!=pointerToGlobals.end()); }
+  */
 
   void storeGlobalRead(const std::set<unsigned> &vars, std::string l)
   {
    for(SetIter i=vars.begin();i!=vars.end();i++)
-     varsPtsToGlobalRead.insert(std::pair<unsigned,std::string>(*i,l)); 
+     {
+       std::string var=getVarAsLoc(*i);
+       globalRead.insert(std::pair<std::string,std::string>(var,l)); 
+     }
   }
 
   void storeGlobalWrite(const std::set<unsigned> &vars, std::string l)
   {
-   for(SetIter i=vars.begin();i!=vars.end();i++)
-     varsPtsToGlobalWrite.insert(std::pair<unsigned,std::string>(*i,l)); 
+    for(SetIter i=vars.begin();i!=vars.end();i++){
+      std::string var=getVarAsLoc(*i);
+      globalWrite.insert(std::pair<std::string,std::string>(var,l)); 
+    }
   }
 
   void storeMapInfo(std::string loc,std::string vCurr, std::string vGlobal)
@@ -68,58 +100,58 @@ public:
 
   VarsLoc getGlobalRead()
   {
-    return varsPtsToGlobalRead;
+    return globalRead;
   }
   VarsLoc getGlobalWrite()
   {
-    return varsPtsToGlobalWrite;
+    return globalWrite;
   }
 
   VarsLocIter globalReadBegin()
   {
-    return varsPtsToGlobalRead.begin();
+    return globalRead.begin();
   }
 
   VarsLocIter globalReadEnd()
   {
-    return varsPtsToGlobalRead.end();
+    return globalRead.end();
   }
   
   VarsLocIter globalWriteBegin()
   {
-    return varsPtsToGlobalWrite.begin();
+    return globalWrite.begin();
   }
 
   VarsLocIter globalWriteEnd()
   {
-    return varsPtsToGlobalWrite.end();
+    return globalWrite.end();
   }
 
   void printGlobalRead()
   {
-    VarsLocIter i=varsPtsToGlobalRead.begin(), e=varsPtsToGlobalRead.end();
+    VarsLocIter I=globalRead.begin(), E=globalRead.end();
     errs()<<"List of Global Reads: \n";
-    for(;i!=e;i++)
+    for(;I!=E;I++)
     {
-      std::pair <MapType::iterator, MapType::iterator> range=locToVarPairMap.equal_range(i->second);
+      std::pair <MapType::iterator, MapType::iterator> range=locToVarPairMap.equal_range(I->second);
       for (MapType::iterator irange = range.first; irange != range.second; ++irange)
-	errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<i->second<<"\n"; 
+	errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<I->second<<"\n"; 
     }
    }
 
   void printGlobalWrite()
   {
-    VarsLocIter i=varsPtsToGlobalWrite.begin(), e=varsPtsToGlobalWrite.end();
+    VarsLocIter I=globalWrite.begin(), E=globalWrite.end();
     errs()<<"List of Global Writes: \n";
-    for(;i!=e;i++)
+    for(;I!=E;I++)
     {
-      std::pair <MapType::iterator, MapType::iterator> range=locToVarPairMap.equal_range(i->second);
+      std::pair <MapType::iterator, MapType::iterator> range=locToVarPairMap.equal_range(I->second);
       for (MapType::iterator irange = range.first; irange != range.second; ++irange)
-	errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<i->second<<"\n"; 
+	errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<I->second<<"\n"; 
     }
    }
 
-  bool printVarAccessInfo(std::string loc)
+  bool showVarReadWriteLoc(std::string loc)
   {
     std::pair <MapType::iterator, MapType::iterator> range;
     range = locToVarPairMap.equal_range(loc);

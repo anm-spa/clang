@@ -75,11 +75,12 @@ public:
    // actual in/out parameters.
    void ProcessAssignCallStmt(const std::vector<unsigned>& a_rets, int f, const std::vector<unsigned>& a_args);
 
+   void ProcessAssignFunPtrAddrStmt(int e1, int e2);
    // To create a new reference variable. Returns the int to identify the variable.
    int CreateNewVar(void);
 
    /// Prints all points-to-sets using the identifier names as found in \a symbtab
-   void PrintAsPointsToSets(const symTab<symIdentBase> *symbTab, std::ostream &o=std::cout) const;
+   void PrintAsPointsToSets(const SymTab<SymBase> *symbTab, std::ostream &o=std::cout) const;
    // can we make it virtual or something else?
    void PrintAsPointsToSets(std::ostream &o=std::cout) const;
    // For debug printouts
@@ -89,6 +90,8 @@ public:
    /// if \a id is not a pointer. The \a id as well as the returned
    /// variables are represented by their globally unique keys.
    const std::set<unsigned> &GetPointsToVarsSet(unsigned id) const;
+
+   std::set<unsigned> getPtsToFuncsWithPartialPA(unsigned var);
    // To get the variables pointed to in a set
    void GetPointsToVars(unsigned int var, std::set<unsigned> * vars_pointed_to) const;
    // Returns true if there are some variables pointed to by id.
@@ -122,7 +125,7 @@ public:
    void BuildVarToFuncsPointToSets();
    void BuildVarToVarsAndVarToLabelsPointToSets();
 
-   void initPASolver(std::set<unsigned> &vars, std::set<fsignature *> &funcs);
+   void initPASolver(std::set<unsigned> &vars, std::set<FuncSignature *> &funcs);
 private:
 
    // Fucntion which does the actual pointer analysis
@@ -130,7 +133,7 @@ private:
 
    // Prints a mapping from variable to a set of entities using the real names eventually
    // found in symbtab
-    void PrintMapToSet(const std::map<unsigned, std::set<unsigned> > &x, std::ostream &o, const symTab<symIdentBase> *symbTab=NULL) const;
+    void PrintMapToSet(const std::map<unsigned, std::set<unsigned> > &x, std::ostream &o, const SymTab<SymBase> *symbTab=NULL) const;
     // void PrintMapToSet(const std::map<unsigned, std::set<unsigned> > &x, std::ostream &o) const;
    // To get the type of the argument variable. Also short cuts
    // any forward reference chain longer than 1.
@@ -152,6 +155,9 @@ private:
 
    // Unconditional join between two variables point-to sets.
    void join(int e1, int e2);
+
+   void joinWithoutUnification(int e1, int e2);
+
 
    // Unconditional unify of two types.
    void unify(CSteensgaardPAType * t1, CSteensgaardPAType * t2);

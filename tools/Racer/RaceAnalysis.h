@@ -63,42 +63,42 @@ public:
     {
       GlobalVarHandler *gv0=paInfo[0];
       GlobalVarHandler *gv1=paInfo[1];
-      if(gv0 && !gv0->printVarAccessInfo(it->second))
+      if(gv0 && !gv0->showVarReadWriteLoc(it->second))
 	if(gv1)
-	  gv1->printVarAccessInfo(it->second);
+	  gv1->showVarReadWriteLoc(it->second);
     } 
   }
 
   //This method will be optimized
   VarsLoc set_intersect(const VarsLoc S1, const VarsLoc S2)
   {
-    VarsLocIter ibegin1,ibegin2,iend1,iend2;
+    VarsLocIter B1,B2,E1,E2;
     VarsLoc result;
-    ibegin1=S1.begin(); 
-    ibegin2=S2.begin();
-    iend1=S1.end(); 
-    iend2=S2.end();
-    std::set<unsigned> V1,V2,V3;
-    std::multimap<unsigned,std::string> map;
+    B1=S1.begin(); 
+    B2=S2.begin();
+    E1=S1.end(); 
+    E2=S2.end();
+    std::set<std::string> V1,V2,V3;
+    std::multimap<std::string,std::string> map;
     //split VarsLoc
-    for(;ibegin1!=iend1;ibegin1++)
+    for(;B1!=E1;B1++)
     {
-      V1.insert(ibegin1->first);
-      map.insert(std::pair<unsigned,std::string>(ibegin1->first,ibegin1->second));
+      V1.insert(B1->first);
+      map.insert(std::pair<std::string,std::string>(B1->first,B1->second));
     }
-    for(;ibegin2!=iend2;ibegin2++)
+    for(;B2!=E2;B2++)
     {
-      V2.insert(ibegin2->first);
-      map.insert(std::pair<unsigned,std::string>(ibegin2->first,ibegin2->second));
+      V2.insert(B2->first);
+      map.insert(std::pair<std::string,std::string>(B2->first,B2->second));
     }
     std::set_intersection(V1.begin(), V1.end(),V2.begin(),V2.end(), std::inserter(V3,V3.begin()));
-    SetIter ib=V3.begin(),ie=V3.end();
-    for(;ib!=ie;ib++)
+    std::set<std::string>::iterator B=V3.begin(),E=V3.end();
+    for(;B!=E;B++)
     {
-      std::pair <std::multimap<unsigned,std::string>::iterator, std::multimap<unsigned,std::string>::iterator> range;
-	 range = map.equal_range(*ib);
-	 for(std::multimap<unsigned,std::string>::iterator irange = range.first; irange != range.second; ++irange)
-	   result.insert(std::pair<unsigned,std::string>(*ib,irange->second));
+      std::pair <std::multimap<std::string,std::string>::iterator, std::multimap<std::string,std::string>::iterator> range;
+      range = map.equal_range(*B);
+      for(std::multimap<std::string,std::string>::iterator irange = range.first; irange != range.second; ++irange)
+	result.insert(std::pair<std::string,std::string>(*B,irange->second));
     }  
     return result;
   }  
@@ -122,6 +122,8 @@ public:
      res1=set_intersect(read1,write2);
      res2=set_intersect(write1,read2);
      res3=set_intersect(write1,write2);
+
+     
      // errs()<<"\n********************************************\n";
      if(res1.empty() && res2.empty() && res3.empty())
         errs()<<"\t!!!No Data Race found!!! \n";

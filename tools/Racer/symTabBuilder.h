@@ -1,21 +1,21 @@
 #include "symtab.h"
 using namespace llvm;
 
-class symTabBuilderVisitor : public RecursiveASTVisitor<symTabBuilderVisitor> {
+class SymTabBuilderVisitor : public RecursiveASTVisitor<SymTabBuilderVisitor> {
 private:
     ASTContext *astContext; // used for getting additional AST info
     FunctionDecl *current_f=NULL;
-    symTab<symIdentBase> *symbTab=new symTab<symIdentBase>();
+    SymTab<SymBase> *symbTab=new SymTab<SymBase>();
 
 public:
  void dumpSymTab(){
    symbTab->dump(); 
  }  
- explicit symTabBuilderVisitor(CompilerInstance *CI) 
+ explicit SymTabBuilderVisitor(CompilerInstance *CI) 
    : astContext(&(CI->getASTContext())) // initialize private members
    {}
  
- symTab<symIdentBase> *getSymTab()
+ SymTab<SymBase> *getSymTab()
  {
    return symbTab;
  } 
@@ -28,7 +28,7 @@ public:
        std::string fname;
        if(current_f) fname=current_f->getNameInfo().getAsString();
        else fname="Global";
-       symIdentFuncDeclCxtClang *ident=new symIdentFuncDeclCxtClang(func);
+       SymFuncDeclCxtClang *ident=new SymFuncDeclCxtClang(func);
        symbTab->addSymb(ident);
        unsigned id=ident->getId();
        for(unsigned int i=0; i<func->getNumParams(); i++)
@@ -37,12 +37,12 @@ public:
 	   if(clang::VarDecl *vd=dyn_cast<clang::VarDecl>(p))
 	     if(clang::ValueDecl *val=dyn_cast<clang::ValueDecl>(vd)) {	    
 	       if(!vd->getType()->isPointerType()){
-		 symIdentArgVarCxtClang *arg=new symIdentArgVarCxtClang(val,NOPTR,id,fname);
+		 SymArgVarCxtClang *arg=new SymArgVarCxtClang(val,NOPTR,id,fname);
 		 symbTab->addSymb(arg);
 		 ident->insertArg(arg);
 	       } 
 	       else{
-		 symIdentArgVarCxtClang *arg=new symIdentArgVarCxtClang(val,PTR_L1,id,fname);
+		 SymArgVarCxtClang *arg=new SymArgVarCxtClang(val,PTRONE,id,fname);
 		 ident->insertArg(arg);
 		 symbTab->addSymb(arg);
 	       }   
@@ -50,7 +50,7 @@ public:
 	 }
        if(!func->getReturnType().getTypePtr()->isVoidType())
        {
-	 symIdentFuncRetCxtClang *ret=new symIdentFuncRetCxtClang(fname);
+	 SymFuncRetCxtClang *ret=new SymFuncRetCxtClang(fname);
 	 symbTab->addSymb(ret);
 	 ident->insertRet(ret);
        } 
@@ -68,16 +68,20 @@ public:
 	 if(current_f) fname=current_f->getNameInfo().getAsString();
 	 else fname="Global";
 	 // Debug Info
-	 errs()<<"Context :"<<fname<<" Ref: "<<val->getNameAsString()<<" Type: ";
-	 errs()<< val->getType().getAsString()<<"\n";
+	 //errs()<<"Context :"<<fname<<" Ref: "<<val->getNameAsString()<<" Type: ";
+	 //errs()<< val->getType().getAsString()<<"\n";
+	 /*if(val->getType().getTypePtr()->isFunctionPointerType())
+	 {
+
+	 } */ 
 	 if(!vdecl->getType()->isPointerType()){
-	   symIdentVarCxtClang *ident=new symIdentVarCxtClang(val,NOPTR,fname);
+	   SymVarCxtClang *ident=new SymVarCxtClang(val,NOPTR,fname);
 	   symbTab->addSymb(ident);
 	   //symbTab->dump(0);	
 	 }	
 	 else
 	   { 
-	     symIdentVarCxtClang *ident=new symIdentVarCxtClang(val,PTR_L1,fname);
+	     SymVarCxtClang *ident=new SymVarCxtClang(val,PTRONE,fname);
 	     symbTab->addSymb(ident);
 	     //symbTab->dump(0);
 	   }   
@@ -92,13 +96,13 @@ public:
 };
 
 
-class symTabBuilder : public ASTConsumer{
+class SymTabBuilder : public ASTConsumer{
 private:
-  symTabBuilderVisitor *visitor; // doesn't have to be private  
+  SymTabBuilderVisitor *visitor; // doesn't have to be private  
 public:
     // override the constructor in order to pass CI
-  explicit symTabBuilder(CompilerInstance *CI)
-  : visitor(new symTabBuilderVisitor(CI)) // initialize the visitor
+  explicit SymTabBuilder(CompilerInstance *CI)
+  : visitor(new SymTabBuilderVisitor(CI)) // initialize the visitor
     {}
 
   virtual void HandleTranslationUnit(ASTContext &Context) {

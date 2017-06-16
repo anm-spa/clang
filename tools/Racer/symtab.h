@@ -11,135 +11,132 @@ using namespace llvm;
 using namespace std;
 template <class T> class symTab;
 
-typedef enum {PTR_L1,PTR_L0,ADDR_OF,NOPTR,UNDEF} PtrType;
+// Types of variables related to ptr variable declared in the code.
+// PTRONE refers to *v and PTRZERO refers v (e.g.)
+typedef enum {PTRONE,PTRZERO,ADDR_OF,FUNPTR,FUNTYPE,NOPTR,UNDEF} PtrType;
 
+// Symbol type
 typedef enum {VAR,EXPR, CALLEXPR,FUNCDECL,ARGVAR, RET, NAI} IdentType;    // NAI: Not An Identifier
 
-class fsignature
+
+// Function signature includes the function id, and any formal parameters and return id.
+//class fsignature
+class FuncSignature
 {
 public:
- fsignature(unsigned id,std::vector<unsigned> &args, std::vector<unsigned> &rturn)
- {
+FuncSignature(unsigned id,std::vector<unsigned> &args, std::vector<unsigned> &rturn)
+{
   fid=id;
   params=args;
   rets=rturn;
- }
-~fsignature(){}
+}
+~FuncSignature(){}
  unsigned fid;
  std::vector<unsigned> params;
  std::vector<unsigned> rets;
 };
 
-class symIdentBase
+
+class SymBase
 {
 public:
-//template<class T> friend class symTab; 
- symIdentBase(): _id(static_cast<unsigned int>(-1)){}
- symIdentBase(unsigned id): _id(id){}
- ~symIdentBase(){}   
- unsigned getId() const {return _id;}
-//virtual std::string getName(){return "Base Class has no name";}
- void setId(unsigned id){_id=id;}
- virtual void dump(){}
- virtual clang::ValueDecl * getVarDecl() const {return NULL;}
- virtual clang::FunctionDecl *getFuncDecl() const {return NULL;}
- virtual fsignature *getFuncSig() const {return NULL;}
- virtual fsignature * buildSign(){return NULL;}
- virtual IdentType getType(){return NAI;}
- std::string ptrTypeToStr(PtrType ptr)
- {
-  switch(ptr)
+SymBase(): _id(static_cast<unsigned int>(-1)){}
+SymBase(unsigned id): _id(id){}
+~SymBase(){}   
+unsigned getId() const {return _id;}
+void setId(unsigned id){_id=id;}
+virtual void dump(){}
+virtual clang::ValueDecl * getVarDecl() const {return NULL;}
+virtual clang::FunctionDecl *getFuncDecl() const {return NULL;}
+virtual FuncSignature *getFuncSig() const {return NULL;}
+virtual FuncSignature * buildSign(){return NULL;}
+virtual IdentType getType(){return NAI;}
+std::string ptrTypeToStr(PtrType ptr)
+{
+switch(ptr)
   {
-    case PTR_L1:  return "PTR L1";
-    case PTR_L0:  return "PTR L0";
+    case PTRONE:  return "PTR L1";
+    case PTRZERO:  return "PTR L0";
     case ADDR_OF: return "ADDR OF";
     case NOPTR:   return "NOPTR";
     case UNDEF:   return "UNDEF";  
     default: return "UNDEF";  
-   }
- }
+  }
+}
 
 private:
  unsigned _id;
 };
 
-class symIdentVarCxtClang: public symIdentBase
+class SymVarCxtClang: public SymBase
 {
 public:
-// template <class T> friend class symTab; 
- symIdentVarCxtClang(): symIdentBase(){_var=NULL; _subtype=UNDEF;}
-/* symIdentVarCxtClang(clang::ValueDecl *var, PtrType ptr):symIdentBase()
-  { _var=var; _subtype=ptr; }
-*/
- symIdentVarCxtClang(clang::ValueDecl *var, PtrType ptr,std::string func):symIdentBase()
+SymVarCxtClang(): SymBase(){_var=NULL; _subtype=UNDEF;}
+
+SymVarCxtClang(clang::ValueDecl *var, PtrType ptr,std::string func):SymBase()
 { _var=var; _subtype=ptr; scope=func;}
 
-/* symIdentVarCxtClang(unsigned id, clang::ValueDecl *var, PtrType ptr):symIdentBase(id)
-  { _var=var; _subtype=ptr; }
-*/
-  void dump(){ 
-     errs()<<"\t\t"<<_var->getNameAsString()<< " ("<< scope <<")"; 
-     errs()<<"\t\t VAR \t\t"<<ptrTypeToStr(_subtype)<<"\n";
-  }
-  IdentType getType(){return VAR;}
-//std::string getName(){return "Base Class has no name";}
-  clang::ValueDecl * getVarDecl() const {return _var;}
-  clang::FunctionDecl *getFuncDecl() const {return NULL;}
-  fsignature *getFuncSig() const {return NULL;}
+void dump(){ 
+  errs()<<"\t\t"<<_var->getNameAsString()<< " ("<< scope <<")"; 
+  errs()<<"\t\t VAR \t\t"<<ptrTypeToStr(_subtype)<<"\n";
+}
+IdentType getType(){return VAR;}
+clang::ValueDecl * getVarDecl() const {return _var;}
+clang::FunctionDecl *getFuncDecl() const {return NULL;}
+FuncSignature *getFuncSig() const {return NULL;}
 private:
   clang::ValueDecl * _var;
   PtrType _subtype;
   std::string scope;
 };
 
-class symIdentExprCxtClang: public symIdentBase
+class SymExprCxtClang: public SymBase
 {
 public:
- symIdentExprCxtClang(): symIdentBase(){ _exp=NULL;}
- symIdentExprCxtClang(clang::Expr *exp): symIdentBase(){_exp=exp;}
-symIdentExprCxtClang(unsigned id, clang::Expr *exp): symIdentBase(id){_exp=exp;}
-void dump(){ errs()<<"Expr Not Dump"; errs()<<"\t EXPR \t No\n";} 
-IdentType getType(){return EXPR;}
-virtual clang::ValueDecl * getVarDecl() const {return NULL;}
-clang::FunctionDecl *getFuncDecl() const {return NULL;}
-fsignature *getFuncSig() const {return NULL;}
+ SymExprCxtClang(): SymBase(){ _exp=NULL;}
+ SymExprCxtClang(clang::Expr *exp): SymBase(){_exp=exp;}
+ SymExprCxtClang(unsigned id, clang::Expr *exp): SymBase(id){_exp=exp;}
+ void dump(){ errs()<<"Expr Not Dump"; errs()<<"\t EXPR \t No\n";} 
+ IdentType getType(){return EXPR;}
+ virtual clang::ValueDecl * getVarDecl() const {return NULL;}
+ clang::FunctionDecl *getFuncDecl() const {return NULL;}
+ FuncSignature *getFuncSig() const {return NULL;}
 private:
-  clang::Expr * _exp;
+ clang::Expr * _exp;
 };
 
 
-class symIdentFuncRetCxtClang: public symIdentBase
+class SymFuncRetCxtClang: public SymBase
 {
 public:
-//symIdentFuncRetCxtClang(): symIdentBase(){}
-symIdentFuncRetCxtClang(std::string func): symIdentBase(){scope=func;}
+ SymFuncRetCxtClang(std::string func): SymBase(){scope=func;}
   void dump(){ 
       errs()<<" \t\tRet "<< "("<< scope <<")"; 
-      errs()<<"\t\t TEMPVAR \t No"<<"\n";} 
+      errs()<<"\t\t TEMPVAR \t No"<<"\n";
+  } 
   IdentType getType(){return RET;}
   virtual clang::ValueDecl * getVarDecl() const {return NULL;}
   clang::FunctionDecl *getFuncDecl() const {return NULL;}
-  fsignature *getFuncSig() const {return NULL;}
+  FuncSignature *getFuncSig() const {return NULL;}
 private:
   std::string scope;
 };
 
-class symIdentArgVarCxtClang: public symIdentBase
+class SymArgVarCxtClang: public SymBase
 {
 public:
-/*symIdentArgVarCxtClang(): symIdentBase(){ _arg=NULL;_subtype=UNDEF;}
- symIdentArgVarCxtClang(clang::ValueDecl *val, PtrType ptr): symIdentBase(){_arg=val,_subtype=ptr;}
- symIdentArgVarCxtClang(clang::ValueDecl *val, PtrType ptr, unsigned fid): symIdentBase(){_arg=val; _subtype=ptr;_funid=fid;}*/
- symIdentArgVarCxtClang(clang::ValueDecl *val, PtrType ptr, unsigned fid, std::string func): symIdentBase(){_arg=val; _subtype=ptr;_funid=fid;scope=func;}
+ SymArgVarCxtClang(clang::ValueDecl *val, PtrType ptr, unsigned fid, std::string func): SymBase(){
+   _arg=val; _subtype=ptr;_funid=fid;scope=func;
+}
 
-  void dump(){ 
-    errs()<<"\t\t"<<_arg->getNameAsString()<< " ("<< scope <<")"; 
-    errs()<<"\t\t FuncArgVar \t "<<ptrTypeToStr(_subtype)<<"\n";
-  } 
+void dump(){ 
+  errs()<<"\t\t"<<_arg->getNameAsString()<< " ("<< scope <<")"; 
+  errs()<<"\t\t FuncArgVar \t "<<ptrTypeToStr(_subtype)<<"\n";
+} 
 IdentType getType(){return ARGVAR;}
 virtual clang::ValueDecl * getVarDecl() const {return _arg;}
 clang::FunctionDecl *getFuncDecl() const {return NULL;}
-fsignature *getFuncSig() const {return NULL;}
+FuncSignature *getFuncSig() const {return NULL;}
 private:
   clang::ValueDecl * _arg;
   unsigned _funid;
@@ -147,55 +144,47 @@ private:
   std::string scope;
 };
 
-class symIdentFuncDeclCxtClang: public symIdentBase
+class SymFuncDeclCxtClang: public SymBase
 {
 public:
- symIdentFuncDeclCxtClang(): symIdentBase(){ _func=NULL;}
- symIdentFuncDeclCxtClang(clang::FunctionDecl *fun): symIdentBase(){_func=fun;}
-  //symIdentFuncDeclCxtClang(unsigned id, clang::FunctionDecl *fun): symIdentBase(id){_func=fun;}
-  ~symIdentFuncDeclCxtClang(){delete _fsig;}
-  void insertArg(symIdentArgVarCxtClang *arg){_params.push_back(arg);} 
-  void insertRet(symIdentFuncRetCxtClang *ret){_rets.push_back(ret);} 
-  void dump()
-  { 
-    errs()<<"\t\t"<<_func->getNameInfo().getAsString(); errs()<<"\t\t FUNC DECL \t X\n";
-    if(_params.size()>0){
-      //errs()<<"\t\t ---- Function Parameters----\n";
-      /*for(auto it=_params.begin();it!=_params.end();it++)
-      {
-	(*it)->dump();
-	//errs()<<"\n";
-	}*/
-    }
-  }
-  IdentType getType(){return FUNCDECL;}
-  virtual clang::ValueDecl * getVarDecl() const {return NULL;}
-  clang::FunctionDecl *getFuncDecl() const {return _func;}
-  fsignature *getFuncSig() const {return _fsig;}
-  fsignature * buildSign(){
-    std::vector<unsigned> args,rets;
-    for(auto it=_params.begin();it!=_params.end();it++)
-	args.push_back((*it)->getId());
+ SymFuncDeclCxtClang(): SymBase(){ _func=NULL;}
+ SymFuncDeclCxtClang(clang::FunctionDecl *fun): SymBase(){_func=fun;}
+ ~SymFuncDeclCxtClang(){delete _fsig;}
+ void insertArg(SymArgVarCxtClang *arg){_params.push_back(arg);} 
+ void insertRet(SymFuncRetCxtClang *ret){_rets.push_back(ret);} 
+ void dump()
+ { 
+   errs()<<"\t\t"<<_func->getNameInfo().getAsString(); errs()<<"\t\t FUNC DECL \t X\n";
+ }
+ IdentType getType(){return FUNCDECL;}
+ virtual clang::ValueDecl * getVarDecl() const {return NULL;}
+ clang::FunctionDecl *getFuncDecl() const {return _func;}
+ FuncSignature *getFuncSig() const {return _fsig;}
+ FuncSignature * buildSign(){
+ std::vector<unsigned> args,rets;
+ for(auto it=_params.begin();it!=_params.end();it++)
+   args.push_back((*it)->getId());
        
-    for(auto it=_rets.begin();it!=_rets.end();it++)
-      rets.push_back((*it)->getId());
+ for(auto it=_rets.begin();it!=_rets.end();it++)
+   rets.push_back((*it)->getId());
 
-    _fsig=new fsignature(getId(),args,rets); 
-    return _fsig;
-  } 
+ _fsig=new FuncSignature(getId(),args,rets); 
+   return _fsig;
+ }
+ 
 private:
   clang::FunctionDecl * _func;
-  fsignature * _fsig;
-  std::vector<symIdentArgVarCxtClang *> _params;
-  std::vector<symIdentFuncRetCxtClang *> _rets;
+  FuncSignature * _fsig;
+  std::vector<SymArgVarCxtClang *> _params;
+  std::vector<SymFuncRetCxtClang *> _rets;
 };
 
 template <class T>
-class symTab
+class SymTab
 {
 public:
-  symTab(){}
-  virtual ~symTab(){};
+  SymTab(){}
+  virtual ~SymTab(){};
 
   void dump(unsigned key)
   {
@@ -233,7 +222,7 @@ public:
     else return -1;
   }
 
-  fsignature *lookupfunc(clang::FunctionDecl *funDecl) const
+  FuncSignature *lookupfunc(clang::FunctionDecl *funDecl) const
   {
     auto it=_funcmap.find(funDecl);
     if(it!=_funcmap.end())
@@ -251,7 +240,7 @@ public:
 
   unsigned size(){return _tab.size();}
 
-  void getVarsAndFuncs(std::set<unsigned> &vars, std::set<fsignature *> &funcs) const
+  void getVarsAndFuncs(std::set<unsigned> &vars, std::set<FuncSignature *> &funcs) const
   {
     for(auto it=_tab.begin();it!=_tab.end();it++)
     {
@@ -273,12 +262,12 @@ public:
     {
       errs()<<"| "<< i<<"  ";
       _tab[i]->dump(); 
-      //errs()<<"\n";
+
     }
     errs()<< "-----------------------------------------------------------------\n";
   }
   
-  // extern template symIdentBase lookupSymb<symIdentBase>(unsigned key);
+
 protected:
   bool valid(unsigned key) const{ return key>=0 && key <_tab.size();}
 

@@ -23,11 +23,11 @@ void VisualizeCFG(clang::AnalysisDeclContext *ac,clang::CFG *cfg)
 class RaceDetector : public ASTConsumer {
 private:
   SteengaardPAVisitor *visitorPA; 
-  symTabBuilderVisitor *visitorSymTab;
+  SymTabBuilderVisitor *visitorSymTab;
 public:
     // override the constructor in order to pass CI
     explicit RaceDetector(CompilerInstance *CI)
-      : visitorPA(new SteengaardPAVisitor(CI)),visitorSymTab(new symTabBuilderVisitor(CI))
+      : visitorPA(new SteengaardPAVisitor(CI)),visitorSymTab(new SymTabBuilderVisitor(CI))
       {
       }
 
@@ -42,11 +42,11 @@ public:
     visitorSymTab->dumpSymTab();
     
     visitorPA->initPA(visitorSymTab->getSymTab());
-    //visitorPA->printPAInfo();      
+
     visitorPA->TraverseDecl(Context.getTranslationUnitDecl());
-    visitorPA->storeGlobalPointers();	
-    visitorPA->printPAInfo();   
-    //visitorPA->printVarAccessInfo(); 
+    visitorPA->storeGlobalPointers();
+    visitorPA->showPAInfo();   
+    //visitorPA->showVarReadWriteLoc(); 
 
     racer->createNewTUAnalysis(visitorPA->getGvHandler());
     }   
@@ -63,7 +63,7 @@ class RacerFrontendAction : public ASTFrontendAction {
 class SymbTabAction : public ASTFrontendAction {
  public:
     virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)    {
-      return llvm::make_unique<symTabBuilder>(&CI);
+      return llvm::make_unique<SymTabBuilder>(&CI);
      }
 };
 
