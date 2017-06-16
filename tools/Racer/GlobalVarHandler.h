@@ -24,14 +24,9 @@ private:
   std::set<string> globals;   // Set of all global Vars in a translation unit            
   std::map<unsigned,string> globalVarMap;
   std::set<unsigned> globalVarId;
-
-  // map.second is a set of pointer variables pointing to the global at map.first 
-  //std::map<unsigned,std::set<unsigned> > varToVarsGlobals;  
-
-  // set of all pointers pointing to globals
-  // std::set<unsigned> pointerToGlobals;     // elements of this set are from the symbol table        
   VarsLoc globalRead;
   VarsLoc globalWrite;
+
   // locToVarPairMap.second.first points to locToVarPairMap.second.second at locToVarPairMap.first
   MapType locToVarPairMap;
 public:
@@ -55,25 +50,11 @@ public:
       assert(0);   //execution should not reach here
   }  
   
-  /*
-  void insertPtsToGv(const std::set<unsigned> &vars_pointed_to, unsigned globalVar)
-  {
-    pointerToGlobals.insert(vars_pointed_to.begin(),vars_pointed_to.end());
-    varToVarsGlobals.insert(std::pair<unsigned, std::set<unsigned> >(globalVar,vars_pointed_to));
-  }
-
-  */
-  
   SetIter gVarsBegin(){return globalVarId.begin();}
 
   SetIter gVarsEnd(){return globalVarId.end();}  
 
   bool isGv(unsigned p){ return globalVarId.find(p)!=globalVarId.end();}
-
-  /*
-  bool isPtrToGv(unsigned p)
-  { return (pointerToGlobals.find(p)!=pointerToGlobals.end()); }
-  */
 
   void storeGlobalRead(const std::set<unsigned> &vars, std::string l)
   {
