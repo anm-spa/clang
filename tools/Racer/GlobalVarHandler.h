@@ -11,7 +11,7 @@ typedef std::set<std::pair<std::string,std::string> > VarsLoc;
 typedef std::set<std::pair<std::string,std::string> >::iterator VarsLocIter;
 
 // maps program location to Var accessed and pointing to the global
-typedef std::multimap<std::string,std::pair<std::string,std::string> > MapType; 
+typedef std::map<std::string,std::pair<std::string,std::string> > MapType; 
 
 std::string printAccessType(AccessType acc)
 {
@@ -57,7 +57,7 @@ public:
   bool isGv(unsigned p){ return globalVarId.find(p)!=globalVarId.end();}
 
   void storeGlobalRead(const std::set<unsigned> &vars, std::string l)
-  {
+  { 
    for(SetIter i=vars.begin();i!=vars.end();i++)
      {
        std::string var=getVarAsLoc(*i);

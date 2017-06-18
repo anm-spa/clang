@@ -28,7 +28,7 @@ private:
   SymTab<SymBase> *_symbTab;
   bool analPointers;                           
   FuncSignature * current_fs;
-  std::map<clang::SourceLocation,std::pair<unsigned,AccessType> >  varMod; 
+  std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >  varMod; 
 
 public:
   explicit SteengaardPAVisitor(CompilerInstance *CI) 
@@ -81,14 +81,15 @@ public:
       
   }
 
-  void writeVarAccessInfo(clang::SourceLocation l, std::pair<unsigned,AccessType> acc)
+  void recordVarAccess(clang::SourceLocation l, std::pair<unsigned,AccessType> acc)
   {
+    //errs()<<"Record:"<<l.printToString(astContext->getSourceManager());
     varMod.insert(std::pair<clang::SourceLocation, std::pair<unsigned,AccessType> >(l,acc));
   }
 
   void showVarReadWriteLoc()
   {
-    std::map<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
+    std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
     for(;it!=varMod.end();it++)
       {
 	std::string var=((_symbTab->lookupSymb(it->second.first))->getVarDecl())->getNameAsString();
@@ -111,7 +112,7 @@ void storeGlobalPointers()
     
   //split pointers according to Read or Write access 
   // ForALL "var" accessed in the code (next msg)
-  std::map<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
+  std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
   for(;it!=varMod.end();it++)
   {
     clang::ValueDecl *val=((_symbTab->lookupSymb(it->second.first))->getVarDecl());
@@ -226,7 +227,19 @@ void storeGlobalPointers()
   return std::pair<unsigned,PtrType>(0,UNDEF);
  }
 
- // this function is not virtualized by recursive AST visitor    
+
+ void updatePAonUnaryExpr(clang::UnaryOperator *uop)
+ {
+   clang::Expr *exp = uop->getSubExpr()->IgnoreImplicit();
+   if(uop->isIncrementDecrementOp())
+   if(clang::DeclRefExpr *dref=dyn_cast<clang::DeclRefExpr>(exp))
+     {
+       std::pair<unsigned,PtrType> E=getExprIdandType(exp);
+       recordVarAccess(dref->getLocStart(),std::pair<unsigned,AccessType>(E.first,RD));
+       recordVarAccess(dref->getLocEnd(),std::pair<unsigned,AccessType>(E.first,WR));
+     }     
+ }
+    
  void updatePAonBinaryExpr(clang::BinaryOperator *bop)
  {
    clang::BinaryOperator::Opcode opcode=bop->getOpcode();
@@ -251,15 +264,15 @@ void storeGlobalPointers()
 	 {
 	   //errs()<< "Assignment e1=*e2"<<lhs_pair.first<<" "<<rhs_pair.first;
 	   pa->ProcessAssignFromIndStmt(lhs_pair.first,rhs_pair.first);
-	   writeVarAccessInfo(rhs->getExprLoc(),std::pair<unsigned,AccessType>(rhs_pair.first,RD));
-	   writeVarAccessInfo(lhs->getExprLoc(),std::pair<unsigned,AccessType>(lhs_pair.first,WR));
+	   recordVarAccess(rhs->getExprLoc(),std::pair<unsigned,AccessType>(rhs_pair.first,RD));
+	   recordVarAccess(lhs->getExprLoc(),std::pair<unsigned,AccessType>(lhs_pair.first,WR));
 	 }
        else if((lhs_pair.second==PTRONE) && (rhs_pair.second==PTRZERO))
 	 {
 	   // errs()<< "Assignment *e1=e2 "<<lhs_pair.first<<" "<<rhs_pair.first;
 	   pa->ProcessAssignToIndStmt(lhs_pair.first,rhs_pair.first);
-	   writeVarAccessInfo(rhs->getExprLoc(),std::pair<unsigned,AccessType>(rhs_pair.first,RD));
-	   writeVarAccessInfo(lhs->getExprLoc(),std::pair<unsigned,AccessType>(lhs_pair.first,WR));
+	   recordVarAccess(rhs->getExprLoc(),std::pair<unsigned,AccessType>(rhs_pair.first,RD));
+	   recordVarAccess(lhs->getExprLoc(),std::pair<unsigned,AccessType>(lhs_pair.first,WR));
 	 }
        else if(CallExpr *call = dyn_cast<CallExpr>(rhs)) 
 	 {
@@ -273,7 +286,7 @@ void storeGlobalPointers()
 	}
        else
 	 { 
-	   writeVarAccessInfo(lhs->getExprLoc(),std::pair<unsigned,AccessType>(lhs_pair.first,WR));
+	   recordVarAccess(lhs->getExprLoc(),std::pair<unsigned,AccessType>(lhs_pair.first,WR));
 	   traverse_subExpr(rhs);
 	 } 
      }    
@@ -282,29 +295,29 @@ void storeGlobalPointers()
  bool VisitStmt(Stmt *st) 
  {
    // Consider statements like int x or int x=10,y,z
-   if (DeclStmt *decl_stmt=dyn_cast<DeclStmt>(st)) {               
+   /*  if (DeclStmt *decl_stmt=dyn_cast<DeclStmt>(st)) {  
      clang::DeclStmt::const_decl_iterator it=decl_stmt->decl_begin();
+     // single statement may contain multiple declarations     
      for(;it!=decl_stmt->decl_end();it++)   { 
-       // single statement may contain multiple declarations     
        if(VarDecl *vardecl=dyn_cast<VarDecl>(*it))    // if it is a variable declaration
 	 {
 	   VarDecl *def=vardecl->getDefinition();
 	   if(def) VisitVarDecl(def);
-	   Expr * exp=const_cast<clang::Expr *>(def->getAnyInitializer());
-	   if(exp){
-	     traverse_subExpr(exp->IgnoreImplicit());
-	     if(clang::ValueDecl *val=dyn_cast<clang::ValueDecl>(def)) {	    
-	       unsigned vid=_symbTab->lookupId(val);
-	       writeVarAccessInfo(def->getSourceRange().getBegin(),std::pair<unsigned,AccessType>(vid,WR));
-	     }
-	   }
 	 }
      }//forEnd
-   }   
-  else if (clang::BinaryOperator *bop=dyn_cast<clang::BinaryOperator>(st))
-    updatePAonBinaryExpr(bop); 
+   } */   
+   if (clang::BinaryOperator *bop=dyn_cast<clang::BinaryOperator>(st))
+    { 
+      updatePAonBinaryExpr(bop); 
+    }
+ 
+  else if (clang::UnaryOperator *uop=dyn_cast<clang::UnaryOperator>(st))
+    { 
+      updatePAonUnaryExpr(uop);
+    } 
 
-  // Update PA for function calls
+   // Update PA for function calls
+   // if x=f(Args), this st is processed by both updatePAOnCallExpr and updatePAonBinaryExpr
   else if (CallExpr *call = dyn_cast<CallExpr>(st)) {
     updatePAOnCallExpr(call,-1);
   }
@@ -317,6 +330,14 @@ void storeGlobalPointers()
   else if (IfStmt *ifstmt = dyn_cast<IfStmt>(st)) {
     traverse_subExpr(ifstmt->getCond()->IgnoreImplicit());
   }  
+  else if (ForStmt *forstmt = dyn_cast<ForStmt>(st)) 
+  {
+    traverse_subExpr(forstmt->getCond()->IgnoreImplicit());
+  }
+  else if(WhileStmt *whilestmt = dyn_cast<WhileStmt>(st)) 
+  {
+    traverse_subExpr(whilestmt->getCond()->IgnoreImplicit());
+  }
    return true;
  }
 
@@ -385,18 +406,18 @@ void updatePABasedOnExpr(unsigned id, Expr * exp)
   if(expTypePair.second==PTRONE || expTypePair.second==PTRZERO)
     { 
       pa->ProcessAssignStmt(id,expTypePair.first);  
-      writeVarAccessInfo(exp->getExprLoc(),std::pair<unsigned,AccessType>(expTypePair.first,RD));
+      recordVarAccess(exp->getExprLoc(),std::pair<unsigned,AccessType>(expTypePair.first,RD));
     }
   else if(expTypePair.second==ADDR_OF)
     {
       pa->ProcessAssignAddrStmt(id,expTypePair.first);
-      writeVarAccessInfo(exp->getExprLoc(),std::pair<unsigned,AccessType>(expTypePair.first,RD));
+      recordVarAccess(exp->getExprLoc(),std::pair<unsigned,AccessType>(expTypePair.first,RD));
     }
   else traverse_subExpr(exp);
 }
 
 bool traverse_subExpr(Expr * exp)
-{
+{ 
   if(exp->isIntegerConstantExpr(*astContext,NULL)) return true;
   if(clang::DeclRefExpr *dexpr=dyn_cast<clang::DeclRefExpr>(exp))
     {
@@ -408,8 +429,8 @@ bool traverse_subExpr(Expr * exp)
 	     else
 	      errs()<< "Variables Accessed "<<vd->getQualifiedNameAsString()<<"\n";
 	  */ 
-	  std::pair<unsigned,PtrType> rhs_pair=getExprIdandType(exp);
-	  writeVarAccessInfo(exp->getExprLoc(),std::pair<unsigned,AccessType>(rhs_pair.first,RD));
+	  std::pair<unsigned,PtrType> E=getExprIdandType(exp);
+	  recordVarAccess(exp->getExprLoc(),std::pair<unsigned,AccessType>(E.first,RD));
 	  return true;
 	} 
     }    
@@ -433,15 +454,20 @@ bool traverse_subExpr(Expr * exp)
 }
 
 // Store Global Variable Information
-bool VisitVarDecl(VarDecl *vdecl)
+bool VisitVarDecl(VarDecl *vDecl)
 {
-  if(!astContext->getSourceManager().isInSystemHeader(vdecl->getLocStart())) 
-    if(clang::ValueDecl *val=dyn_cast<clang::ValueDecl>(vdecl)) {	    	
-      if(vdecl->hasLinkage()) 
-	{ 
-	  unsigned key=_symbTab->lookupId(val);
-	  gv.insert(key, val->getNameAsString());
-	}  
+  if(!astContext->getSourceManager().isInSystemHeader(vDecl->getLocStart())) 
+    {
+      if(clang::ValueDecl *val=dyn_cast<clang::ValueDecl>(vDecl)) {
+	Expr * exp=const_cast<clang::Expr *>(vDecl->getAnyInitializer());
+	unsigned key=_symbTab->lookupId(val);
+	if(vDecl->hasLinkage())   
+	  gv.insert(key, val->getNameAsString());  
+	if(exp){
+	  traverse_subExpr(exp->IgnoreImplicit());
+	  recordVarAccess(vDecl->getSourceRange().getBegin(),std::pair<unsigned,AccessType>(key,WR));
+	}
+      }
     }
   return true;
 }
