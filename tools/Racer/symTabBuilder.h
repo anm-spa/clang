@@ -6,22 +6,24 @@ private:
     ASTContext *astContext; // used for getting additional AST info
     FunctionDecl *current_f=NULL;
     SymTab<SymBase> *symbTab=new SymTab<SymBase>();
-
+    int debugLabel;
 public:
  void dumpSymTab(){
+   if(debugLabel>1)
    symbTab->dump(); 
  }  
- explicit SymTabBuilderVisitor(CompilerInstance *CI) 
-   : astContext(&(CI->getASTContext())) // initialize private members
+ explicit SymTabBuilderVisitor(CompilerInstance *CI, int dl) 
+   : astContext(&(CI->getASTContext())), debugLabel(dl) 
    {}
  
  SymTab<SymBase> *getSymTab()
  {
    return symbTab;
  } 
-  
+ 
  bool VisitFunctionDecl(FunctionDecl *func) 
  {
+   
    if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart()))
      {
        current_f=func;
@@ -101,8 +103,8 @@ private:
   SymTabBuilderVisitor *visitor; // doesn't have to be private  
 public:
     // override the constructor in order to pass CI
-  explicit SymTabBuilder(CompilerInstance *CI)
-  : visitor(new SymTabBuilderVisitor(CI)) // initialize the visitor
+  explicit SymTabBuilder(CompilerInstance *CI, int dl)
+    : visitor(new SymTabBuilderVisitor(CI,dl)) // initialize the visitor
     {}
 
   virtual void HandleTranslationUnit(ASTContext &Context) {

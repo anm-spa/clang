@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <algorithm>
 
 using clang::HeaderSearchOptions;
 using clang::tooling::CommonOptionsParser;
@@ -86,27 +87,49 @@ class RepoGraph
     std::map<std::string, Node*> nodes;
     std::map<std::string, bool> sysHeaders;
     std::vector<Node*> headers;
+    std::vector<std::string> headerFiles;
     int id;
+    int debugLabel;
     RepoGraph(const RepoGraph &);
     RepoGraph &operator= (const RepoGraph &);
 public: 
-    RepoGraph(): id (0) { }
+ RepoGraph(int dl): id (0), debugLabel(dl) { }
     ~RepoGraph(){ 
       for_each(headers.begin(), headers.end(), deleteNode());
       vector<Node*>::iterator new_end = remove(headers.begin(), headers.end(), static_cast<Node*>(NULL));
       headers.erase(new_end, headers.end());
       nodes.clear();
     }
-
+    void printHeaderList()
+    {
+      if(debugLabel>2)
+      for(auto it=headerFiles.begin();it!=headerFiles.end();it++)
+	{
+	  std::cout<<"File: "<<(*it)<<"\n";
+	}	
+    }  
     void addSysHeader(const std::string &h)
     {
       sysHeaders.insert (std::make_pair (h, 1));
+    }  
+    void addHeaderFiles(const std::string &h)
+    {
+      headerFiles.push_back(h);
+    }
+    
+    std::vector<std::string> getHeaderFiles()
+    {
+      return headerFiles;
     }  
     bool sysHeader(const std::string &h)
     {
       std::map<std::string, bool>::iterator it=sysHeaders.find(h);
       return (it != sysHeaders.end()); 
     }
+    bool inHeaderList(const std::string &h)
+    {
+      return (std::find(headerFiles.begin(),headerFiles.end(),h)!=headerFiles.end());
+    }  
     void recordHeaderDep(const std::string &from,
                      const std::string &to) {
       std::map<std::string, Node*>::iterator it;
@@ -129,7 +152,7 @@ public:
       fromNode->addParent(toNode);
     }
 
-   void viewGraph()
+   void buildDependencyGraph()
    {
      std::deque<Node*> toBeVisited;
      std::deque<Node*>::iterator qit;
@@ -146,7 +169,8 @@ public:
        if(out==0) {
 	 toBeVisited.push_back(*hit);
 	 visited[(*hit)->getId()]++;
-	 //std::cout<<"\n\n Queue has "<<(*hit)->getName()<<"\n";
+	 if(!sysHeader((*hit)->getName()) && !inHeaderList((*hit)->getName()))
+	    addHeaderFiles((*hit)->getName());	   
 	 num++;
        }
        hit++;
@@ -157,21 +181,28 @@ public:
        
        qit=toBeVisited.begin();
        if(nodesOutDegree[(*qit)->getId()]==0)
-       {	 
-	 std::cout<<"\n"<<(*qit)->getName();
+       {
+	 if(debugLabel>1){
+	  std::cout<<"\n"<<(*qit)->getName();
 	 if(sysHeader((*qit)->getName())) std::cout<<"(system header)";
+	 }
+	 if(!sysHeader((*qit)->getName()) && !inHeaderList((*qit)->getName())) 
+	   addHeaderFiles((*qit)->getName());
          std::set<Node*>::iterator i=(*qit)->parentIterBegin(), e=(*qit)->parentIterEnd();
 	 toBeVisited.pop_front();	 
 	 num--;
-	 if(i==e){ std::cout<<"\n\t\t\t<---\n";}
+	 if(i==e && debugLabel>1){ std::cout<<"\n\t\t\t<---\n";}
 	 while(i!=e)
 	 {
-	   std::cout<<"\n\t\t\t<---"<<(*i)->getName()<<"\n";
-	   //std::cout<<"Parent Id :"<<(*i)->getId()<<"\n";
-	   //std::cout<<" Out degree (before): "<<nodesOutDegree[(*i)->getId()]<<"\n";
 	   nodesOutDegree[(*i)->getId()]--;
-	   //std::cout<<" Out degree (after): "<<nodesOutDegree[(*i)->getId()]<<"\n";
-	   //std::cout<<" Visit status: "<< visited[(*i)->getId()] <<"\n";
+	   if(debugLabel>1)
+	     std::cout<<"\n\t\t\t<---"<<(*i)->getName()<<"\n";
+	   if(debugLabel>2){
+	     std::cout<<"Parent Id :"<<(*i)->getId()<<"\n";
+	     std::cout<<" Out degree (before): "<<nodesOutDegree[(*i)->getId()]<<"\n";
+	     std::cout<<" Out degree (after): "<<nodesOutDegree[(*i)->getId()]<<"\n";
+	     std::cout<<" Visit status: "<< visited[(*i)->getId()] <<"\n";
+	   }  
 	   if(visited[(*i)->getId()]<1) // Not yet scheduled to visit
 	     { 
 	       toBeVisited.push_back(*i);
@@ -180,7 +211,7 @@ public:
 	     }  
 	   i++;
 	 }  
-         //std::cout<<"Queue Elements: "<<num<<"\n";
+         if(debugLabel>2) std::cout<<"Queue Elements: "<<num<<"\n";
        } 
        else if(nodesOutDegree[(*qit)->getId()]>0 && visited[(*qit)->getId()]<3) {
          //std::cout<<"Reentry to queue "<<(*qit)->getName()<<"\n";
@@ -274,6 +305,7 @@ void HeaderAnalysisAction::ExecuteAction() {
       pp.Lex (token);
     }
     while (token.isNot (clang::tok::eof));
+    _inc.buildDependencyGraph();
 }
 
 class IncAnalFrontendActionFactory : public clang::tooling::FrontendActionFactory {
@@ -288,19 +320,3 @@ public:
         return new HeaderAnalysisAction(_inc);
     }
 };
-
-/*
-static llvm::cl::extrahelp common_help(CommonOptionsParser::HelpMessage);
-
-int main(int argc, const char* argv[]) {
-  llvm::cl::OptionCategory category("Header Dependency Analysis Tool");
-  CommonOptionsParser options(argc, argv, category);
-  RepoGraph repo;
-  clang::tooling::ClangTool tool(options.getCompilations(),
-                                 options.getSourcePathList());
-  IncAnalFrontendActionFactory act (repo);
-  tool.run(&act);
-  repo.viewGraph();
-}
-
-*/

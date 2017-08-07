@@ -6,13 +6,14 @@
 #include "clang/Tooling/Tooling.h"
 #include "SteengaardPAVisitor.h"
 #include "RaceAnalysis.h"
+#include "headerDepAnalysis.h"
 
 using namespace clang::driver;
 using namespace clang::tooling;
 using namespace llvm;
 
 RaceFinder *racer=new RaceFinder();
-
+int debugLabel=0;
 void VisualizeCFG(clang::AnalysisDeclContext *ac,clang::CFG *cfg)
 {
    //errs()<<" Printing CFGs"<<"\n";
@@ -26,7 +27,7 @@ private:
 public:
     // override the constructor in order to pass CI
     explicit PointerAnalysis(CompilerInstance *CI)
-      : visitorPA(new SteengaardPAVisitor(CI)),visitorSymTab(new SymTabBuilderVisitor(CI))
+      : visitorPA(new SteengaardPAVisitor(CI,debugLabel)),visitorSymTab(new SymTabBuilderVisitor(CI,debugLabel))
   {
   }
 
@@ -53,7 +54,7 @@ private:
 public:
     // override the constructor in order to pass CI
     explicit RaceDetector(CompilerInstance *CI)
-      : visitorPA(new SteengaardPAVisitor(CI)),visitorSymTab(new SymTabBuilderVisitor(CI))
+      : visitorPA(new SteengaardPAVisitor(CI,debugLabel)),visitorSymTab(new SymTabBuilderVisitor(CI, debugLabel))
       {
       }
 
@@ -76,6 +77,7 @@ public:
 class PAFrontendAction : public ASTFrontendAction {
  public:
   virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)   {
+    std::cout<<"Pointer Analysis of "<<file.str()<<"\n";
     return llvm::make_unique<PointerAnalysis>(&CI); // pass CI pointer to ASTConsumer
    }
 };
@@ -92,7 +94,7 @@ class RacerFrontendAction : public ASTFrontendAction {
 class SymbTabAction : public ASTFrontendAction {
  public:
     virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)    {
-      return llvm::make_unique<SymTabBuilder>(&CI);
+      return llvm::make_unique<SymTabBuilder>(&CI,debugLabel);
      }
 };
 
@@ -101,21 +103,45 @@ static cl::OptionCategory RacerOptCat("Static Analysis Options");
 static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 static cl::extrahelp MoreHelp("\nMore help text...");
 
-static cl::opt<bool> Symb("sym",cl::desc("Build and dump the Symbol Table"));
-static cl::opt<bool> PA("pa",cl::desc("show pointer analysis info"));
+static cl::opt<bool> Symb("sym",cl::desc("Build and dump the Symbol Table"), cl::cat(RacerOptCat));
+static cl::opt<bool> PA("pa",cl::desc("show pointer analysis info"), cl::cat(RacerOptCat));
+static cl::opt<bool> HA("ha",cl::desc("show header analysis info"), cl::cat(RacerOptCat));
+enum DLevel {
+  O, O1, O2, O3
+};
+cl::opt<DLevel> DebugLevel("dl", cl::desc("Choose Debug level:"),
+  cl::values(
+	     clEnumValN(O, "none", "No debugging"),
+	     clEnumVal(O1, "Minimal debug info"),
+	     clEnumVal(O2, "Expected debug info"),
+	     clEnumVal(O3, "Extended debug info")), cl::cat(RacerOptCat));
 
 int main(int argc, const char **argv) {
     // parse the command-line args passed to your code 
+
     CommonOptionsParser op(argc, argv, RacerOptCat);        
     // create a new Clang Tool instance (a LibTooling environment)
-    	
     ClangTool Tool(op.getCompilations(), op.getSourcePathList());
    	
     // run the Clang Tool, creating a new FrontendAction (explained below)
     int result;
+    if(DebugLevel==O1) debugLabel=1;
+    else if(DebugLevel==O2) debugLabel=2;
+    else if(DebugLevel==O3) debugLabel=3;
+    
     if(Symb) result = Tool.run(newFrontendActionFactory<SymbTabAction>().get());
     if(PA) result = Tool.run(newFrontendActionFactory<PAFrontendAction>().get());
-    if(!Symb && !PA){
+    if(HA) {
+       RepoGraph repo(debugLabel);
+       IncAnalFrontendActionFactory act (repo);
+       Tool.run(&act);
+       std::vector<std::string> hFiles=repo.getHeaderFiles();
+       repo.printHeaderList();
+
+       ClangTool Tool1(op.getCompilations(), hFiles);
+       result = Tool1.run(newFrontendActionFactory<PAFrontendAction>().get());
+    }
+    if(!Symb && !PA && !HA){
       result = Tool.run(newFrontendActionFactory<RacerFrontendAction>().get());
       //analysisInfo->extractPossibleRaces();
       racer->extractPossibleRaces();

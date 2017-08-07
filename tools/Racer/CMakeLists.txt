@@ -4,6 +4,7 @@ set( LLVM_LINK_COMPONENTS
   Support
   )
 
+#set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #set( SOURCES
 #	steengaardPA.cpp
 #	steengaardPA.h
@@ -16,8 +17,6 @@ add_clang_executable(racer
   steengaardPA.h
   SteengaardPAVisitor.h
   macros.h
-  biMap.h
-  PAInfo.h
   symTabBuilder.h
   symtab.cpp
   symtab.h

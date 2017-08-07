@@ -29,10 +29,10 @@ private:
   bool analPointers;                           
   FuncSignature * current_fs;
   std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >  varMod; 
-
+  int debugLabel;
 public:
-  explicit SteengaardPAVisitor(CompilerInstance *CI) 
-    : astContext(&(CI->getASTContext())) // initialize private members
+  explicit SteengaardPAVisitor(CompilerInstance *CI, int dl) 
+    : astContext(&(CI->getASTContext())), debugLabel(dl) // initialize private members
     {}
 
   void initPA(SymTab<SymBase> *symbTab)
@@ -75,8 +75,9 @@ public:
   void showPAInfo(bool prIntrls=false) 
   {
     rebuildPASet();
+    if(debugLabel>1)
     pa->PrintAsPointsToSets(_symbTab);
-    if(prIntrls)
+    if(debugLabel>2)
       pa->PrintInternals();
       
   }
