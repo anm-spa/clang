@@ -42,6 +42,7 @@ class SymBase
  public: 
  SymBase(): _id(static_cast<unsigned int>(-1)){}
  SymBase(unsigned id): _id(id){}   
+ virtual ~SymBase(){}   
   unsigned getId() const {return _id;}
   void setId(unsigned id){_id=id;}
   virtual void dump(){}

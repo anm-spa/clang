@@ -497,7 +497,7 @@ ProcessAssignCallStmt(const vector<unsigned> &a_rets, int p, const vector<unsign
    lam = deref(lam);
 
    // Create a lambda expression to be associated with p
-   auto_ptr<CSteensgaardPALambdaType> new_lam_t(new CSteensgaardPALambdaType(a_args, a_rets));
+   std::unique_ptr<CSteensgaardPALambdaType> new_lam_t(new CSteensgaardPALambdaType(a_args, a_rets));
 
    // Check if the function is bot
    if(gettype(lam)->IsBot()) {
@@ -1136,7 +1136,7 @@ join(int e1, int e2)
      //std::cout<<"Both not bot \n";
       // Neither t1 or t2 is bot
       // Unify the two types
-      auto_ptr<CSteensgaardPAType> e1_t(gettype(e1)->Copy());
+      std::unique_ptr<CSteensgaardPAType> e1_t(gettype(e1)->Copy());
       CSteensgaardPAType * e2_t = gettype(e2);
 
       // Set e1 to be a forw(e2) type (will remove e1_t)
@@ -1202,7 +1202,7 @@ joinWithoutUnification(int e1, int e2)
      //std::cout<<"Both not bot \n";
       // Neither t1 or t2 is bot
       // Unify the two types
-      auto_ptr<CSteensgaardPAType> e1_t(gettype(e1)->Copy());
+      std::unique_ptr<CSteensgaardPAType> e1_t(gettype(e1)->Copy());
       CSteensgaardPAType * e2_t = gettype(e2);
 
       // Set e1 to be a forw(e2) type (will remove e1_t)
