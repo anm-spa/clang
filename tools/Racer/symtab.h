@@ -39,33 +39,32 @@ FuncSignature(unsigned id,std::vector<unsigned> &args, std::vector<unsigned> &rt
 
 class SymBase
 {
-public:
-SymBase(): _id(static_cast<unsigned int>(-1)){}
-SymBase(unsigned id): _id(id){}
-~SymBase(){}   
-unsigned getId() const {return _id;}
-void setId(unsigned id){_id=id;}
-virtual void dump(){}
-virtual clang::ValueDecl * getVarDecl() const {return NULL;}
-virtual clang::FunctionDecl *getFuncDecl() const {return NULL;}
-virtual FuncSignature *getFuncSig() const {return NULL;}
-virtual FuncSignature * buildSign(){return NULL;}
-virtual IdentType getType(){return NAI;}
-std::string ptrTypeToStr(PtrType ptr)
-{
-switch(ptr)
-  {
-    case PTRONE:  return "PTR L1";
-    case PTRZERO:  return "PTR L0";
-    case ADDR_OF: return "ADDR OF";
-    case NOPTR:   return "NOPTR";
-    case UNDEF:   return "UNDEF";  
-    default: return "UNDEF";  
-  }
-}
-
-private:
- unsigned _id;
+ public: 
+ SymBase(): _id(static_cast<unsigned int>(-1)){}
+ SymBase(unsigned id): _id(id){}   
+  unsigned getId() const {return _id;}
+  void setId(unsigned id){_id=id;}
+  virtual void dump(){}
+  virtual clang::ValueDecl * getVarDecl() const {return NULL;}
+  virtual clang::FunctionDecl *getFuncDecl() const {return NULL;}
+  virtual FuncSignature *getFuncSig() const {return NULL;}
+  virtual FuncSignature * buildSign(){return NULL;}
+  virtual IdentType getType(){return NAI;}
+  std::string ptrTypeToStr(PtrType ptr)
+    {
+      switch(ptr)
+	{
+	case PTRONE:  return "PTR L1";
+	case PTRZERO:  return "PTR L0";
+	case ADDR_OF: return "ADDR OF";
+	case NOPTR:   return "NOPTR";
+	case UNDEF:   return "UNDEF";  
+	default: return "UNDEF";  
+	}
+    }
+  
+ private:
+  unsigned _id;
 };
 
 class SymVarCxtClang: public SymBase
@@ -84,6 +83,7 @@ IdentType getType(){return VAR;}
 clang::ValueDecl * getVarDecl() const {return _var;}
 clang::FunctionDecl *getFuncDecl() const {return NULL;}
 FuncSignature *getFuncSig() const {return NULL;}
+
 private:
   clang::ValueDecl * _var;
   PtrType _subtype;
