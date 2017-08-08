@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <stdlib.h>
 #include "llvm/Support/Casting.h"
+#include <memory>
 using namespace std;
 
 CSteensgaardPA::
@@ -1203,7 +1204,7 @@ joinWithoutUnification(int e1, int e2)
       // Neither t1 or t2 is bot
       // Unify the two types
       std::unique_ptr<CSteensgaardPAType> e1_t(gettype(e1)->Copy());
-      CSteensgaardPAType * e2_t = gettype(e2);
+      //CSteensgaardPAType * e2_t = gettype(e2); check this
 
       // Set e1 to be a forw(e2) type (will remove e1_t)
       CSteensgaardPAForwType * new_e1_t = new CSteensgaardPAForwType(e2);

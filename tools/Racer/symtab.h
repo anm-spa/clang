@@ -259,7 +259,7 @@ public:
     errs()<< "-------------------Symbol Table Information----------------------\n";
     errs()<< "| Id |           Symbol (Scope)      |     Type     | SubType      |\n"; 
     errs()<< "-----------------------------------------------------------------\n";
-    for(int i=0; i< _tab.size();i++)
+    for(unsigned long i=0; i< _tab.size();i++)
     {
       errs()<<"| "<< i<<"  ";
       _tab[i]->dump(); 
