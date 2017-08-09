@@ -1,235 +1,194 @@
-#ifndef STEENSGAARDPAVISITOR_H_
-#define STEENSGAARDPAVISITOR_H_
+/****************************************************************/
+/*          All rights reserved (it will be changed)            */
+/*          masud.abunaser@mdh.se                               */
+/****************************************************************/
 
-#include "clang/AST/AST.h"
-#include "clang/AST/ASTContext.h"
-#include "clang/AST/ASTConsumer.h"
-#include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "steengaardPA.h"
-#include "GlobalVarHandler.h"
-//#include "wpCallGraphBuilder.h"
-#include "symTabBuilder.h"
+#include "steengaardPAVisitor.h"
 
-// CFG related issue
-#include "clang/Analysis/AnalysisContext.h"
-#include <vector>
-#include <algorithm>
-#include<map>
+void SteengaardPAVisitor::initPA(SymTab<SymBase> *symbTab)
+{
+  _symbTab=symbTab;
+  assert(_symbTab);
+  std::set<unsigned> vars;
+  std::set<FuncSignature *> funcs;
+  pa=new CSteensgaardPA();
+  analPointers=false;
+  _symbTab->getVarsAndFuncs(vars,funcs);
+  pa->initPASolver(vars,funcs);
+}  
 
-using namespace std;
-using namespace clang;
+void SteengaardPAVisitor::buildPASet()
+{
+  if(!analPointers)
+    {
+      pa->BuildVarToVarsAndVarToLabelsPointToSets();
+      analPointers=true;
+    }     
+}
+void SteengaardPAVisitor::rebuildPASet()
+{
+  pa->BuildVarToVarsAndVarToLabelsPointToSets();
+  pa->BuildVarToFuncsPointToSets();
+  analPointers=true;
+}
 
-class SteengaardPAVisitor : public RecursiveASTVisitor<SteengaardPAVisitor> {
-private:
-  ASTContext *astContext;                    // used for getting additional AST info
-  CSteensgaardPA *pa;                        // PA solver object
-  GlobalVarHandler gv;
-  SymTab<SymBase> *_symbTab;
-  bool analPointers;                           
-  FuncSignature * current_fs;
-  std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >  varMod; 
-  int debugLabel;
-public:
-  explicit SteengaardPAVisitor(CompilerInstance *CI, int dl) 
-    : astContext(&(CI->getASTContext())), debugLabel(dl) // initialize private members
-    {}
-
-  void initPA(SymTab<SymBase> *symbTab)
-  {
-    _symbTab=symbTab;
-    assert(_symbTab);
-    std::set<unsigned> vars;
-    std::set<FuncSignature *> funcs;
-    pa=new CSteensgaardPA();
-    analPointers=false;
-    _symbTab->getVarsAndFuncs(vars,funcs);
-    pa->initPASolver(vars,funcs);
-  }  
-
-  void importSymTab(SymTab<SymBase> *symbTab)
-  {
-    _symbTab=symbTab;
-  }  
-
-  GlobalVarHandler *getGvHandler() 
-  {  
-    return &gv;
-  }
-
-  void buildPASet()
-  {
-    if(!analPointers)
-      {
-	pa->BuildVarToVarsAndVarToLabelsPointToSets();
-	analPointers=true;
-      }     
-  }
-  void rebuildPASet()
-  {
-    pa->BuildVarToVarsAndVarToLabelsPointToSets();
-    pa->BuildVarToFuncsPointToSets();
-    analPointers=true;
-  }
-
-  void showPAInfo(bool prIntrls=false) 
-  {
-    rebuildPASet();
-    if(debugLabel>1)
+void SteengaardPAVisitor::showPAInfo(bool prIntrls=false) 
+{
+  rebuildPASet();
+  if(debugLabel>1)
     pa->PrintAsPointsToSets(_symbTab);
-    if(debugLabel>2)
-      pa->PrintInternals();
-      
-  }
+  if(debugLabel>2)
+    pa->PrintInternals();  
+}
 
-  void recordVarAccess(clang::SourceLocation l, std::pair<unsigned,AccessType> acc)
-  {
-    //errs()<<"Record:"<<l.printToString(astContext->getSourceManager());
-    varMod.insert(std::pair<clang::SourceLocation, std::pair<unsigned,AccessType> >(l,acc));
-  }
+void SteengaardPAVisitor::recordVarAccess(clang::SourceLocation l, std::pair<unsigned,AccessType> acc)
+{
+  //errs()<<"Record:"<<l.printToString(astContext->getSourceManager());
+  varMod.insert(std::pair<clang::SourceLocation, std::pair<unsigned,AccessType> >(l,acc));
+}
 
-  void showVarReadWriteLoc()
-  {
-    std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
-    for(;it!=varMod.end();it++)
-      {
-	std::string var=((_symbTab->lookupSymb(it->second.first))->getVarDecl())->getNameAsString();
-	errs()<<" Accessed Var "<<var<<" at "<<it->first.printToString(astContext->getSourceManager())<<" : "<<printAccessType(it->second.second)<<"\n";   
-      }	  
-  }
+void SteengaardPAVisitor::showVarReadWriteLoc()
+{
+  std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
+  for(;it!=varMod.end();it++)
+    {
+      std::string var=((_symbTab->lookupSymb(it->second.first))->getVarDecl())->getNameAsString();
+      errs()<<" Accessed Var "<<var<<" at "<<it->first.printToString(astContext->getSourceManager())<<" : "<<printAccessType(it->second.second)<<"\n";   
+    }	  
+}
 
-void storeGlobalPointers()
+void SteengaardPAVisitor::storeGlobalPointers()
 {
   buildPASet();
   std::set<unsigned> ptrToGlobals;
   for(SetIter it=gv.gVarsBegin();it!=gv.gVarsEnd();it++)
-  { 
-    std::set<unsigned> vars_pointed_to; 
-    pa->GetPointedAtVar(*it,&vars_pointed_to);
-    if(!vars_pointed_to.empty())
-      ptrToGlobals.insert(vars_pointed_to.begin(),vars_pointed_to.end());
-    //gv.insertPtsToGv(vars_pointed_to,*it);    // check this method
-  }
+    { 
+      std::set<unsigned> vars_pointed_to; 
+      pa->GetPointedAtVar(*it,&vars_pointed_to);
+      if(!vars_pointed_to.empty())
+	ptrToGlobals.insert(vars_pointed_to.begin(),vars_pointed_to.end());
+      //gv.insertPtsToGv(vars_pointed_to,*it);    // check this method
+    }
     
   //split pointers according to Read or Write access 
   // ForALL "var" accessed in the code (next msg)
   std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
   for(;it!=varMod.end();it++)
-  {
-    clang::ValueDecl *val=((_symbTab->lookupSymb(it->second.first))->getVarDecl());
-    //std::string varAsLoc=val->getLocation()->printToString(astContext->getSourceManager());
+    {
+      clang::ValueDecl *val=((_symbTab->lookupSymb(it->second.first))->getVarDecl());
+      //std::string varAsLoc=val->getLocation()->printToString(astContext->getSourceManager());
+      
+      // if "var" points to a global variable or itself a global
+      if(ptrToGlobals.find(it->second.first)!=ptrToGlobals.end() || gv.isGv(it->second.first))
+	{ 
+	  std::set<unsigned> vars_pointed_to;
+	  std::set<unsigned> intsect;
+	  
+	  // loc is the location where "var" is accessed, and "vCurr" is the variable name
+	  std::string loc=it->first.printToString(astContext->getSourceManager());
+	  std::string vCurr=val->getNameAsString();
 
-    // if "var" points to a global variable or itself a global
-    if(ptrToGlobals.find(it->second.first)!=ptrToGlobals.end() || gv.isGv(it->second.first))
-    { 
-       std::set<unsigned> vars_pointed_to;
-       std::set<unsigned> intsect;
-       
-       // loc is the location where "var" is accessed, and "vCurr" is the variable name
-       std::string loc=it->first.printToString(astContext->getSourceManager());
-       std::string vCurr=val->getNameAsString();
+	  // get all "vars" that "var" points 
+	  pa->GetPointsToVars(it->second.first,&vars_pointed_to);
 
-       // get all "vars" that "var" points 
-       pa->GetPointsToVars(it->second.first,&vars_pointed_to);
+	  // if "var" is a global, insert it to "vars"
+	  if(gv.isGv(it->second.first))
+	    vars_pointed_to.insert(it->second.first);
 
-       // if "var" is a global, insert it to "vars"
-       if(gv.isGv(it->second.first))
-	 vars_pointed_to.insert(it->second.first);
+	  // Now take the intersection of "vars" and globals, which are the set of global vars that var points 
+	  std::set_intersection(vars_pointed_to.begin(), vars_pointed_to.end(),gv.gVarsBegin(),gv.gVarsEnd(), std::inserter(intsect,intsect.begin()));  
 
-       // Now take the intersection of "vars" and globals, which are the set of global vars that var points 
-       std::set_intersection(vars_pointed_to.begin(), vars_pointed_to.end(),gv.gVarsBegin(),gv.gVarsEnd(), std::inserter(intsect,intsect.begin()));  
-
-       if(it->second.second==RD) { 
-
-	 // all globals at insect are read at loc
-	 gv.storeGlobalRead(intsect,loc);
-	 for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
-	   std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
-	 // all globals at insect are read at loc through "var"  
-	   gv.storeMapInfo(loc,vCurr,vGlobal);
-	 }   	 
-       }
-       else {
-	 gv.storeGlobalWrite(intsect,loc);
-	 for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
-   	   std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
-	   gv.storeMapInfo(loc,vCurr,vGlobal);
-	 }  
-       }
-    }     
-  }    
+	  if(it->second.second==RD) { 
+	    
+	    // all globals at insect are read at loc
+	    gv.storeGlobalRead(intsect,loc);
+	    for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
+	      std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
+	      // all globals at insect are read at loc through "var"  
+	      gv.storeMapInfo(loc,vCurr,vGlobal);
+	    }   	 
+	  }
+	  else {
+	    gv.storeGlobalWrite(intsect,loc);
+	    for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
+	      std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
+	      gv.storeMapInfo(loc,vCurr,vGlobal);
+	    }  
+	  }
+	}     
+    }    
 }
 
- bool VisitFunctionDecl(FunctionDecl *func) {
-   if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart())){
-      current_fs=_symbTab->lookupfunc(func);       
-   }
-   return true;
- }
+bool SteengaardPAVisitor::VisitFunctionDecl(FunctionDecl *func) {
+  if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart())){
+    current_fs=_symbTab->lookupfunc(func);       
+  }
+  return true;
+}
   
- std::pair<unsigned,PtrType> getExprIdandType(clang::Expr *exp)
+std::pair<unsigned,PtrType> SteengaardPAVisitor::getExprIdandType(clang::Expr *exp)
  {
-  unsigned id;
-  if(clang::UnaryOperator *uop=dyn_cast<clang::UnaryOperator>(exp))
-    {
-      if(clang::Expr *subexp=uop->getSubExpr()->IgnoreImplicit())
-	if(clang::DeclRefExpr *dexp = clang::dyn_cast<clang::DeclRefExpr>(subexp))
-	  if(clang::ValueDecl *vdec=dyn_cast<clang::ValueDecl>(dexp->getDecl()))
-	    {
-	      clang::UnaryOperator::Opcode op=uop->getOpcode();
-
-	      //Expr is a function type ref
-	      if(vdec->getType().getTypePtr()->isFunctionType())
-		{
-		  FunctionDecl *fdecl=vdec->getAsFunction();    
-		  id=_symbTab->lookupfunc(fdecl)->fid;
-		  return std::pair<unsigned,PtrType>(id,FUNTYPE);
-		}
-	      id=_symbTab->lookupId(vdec);
-
+   unsigned id;
+   if(clang::UnaryOperator *uop=dyn_cast<clang::UnaryOperator>(exp))
+     {
+       if(clang::Expr *subexp=uop->getSubExpr()->IgnoreImplicit())
+	 if(clang::DeclRefExpr *dexp = clang::dyn_cast<clang::DeclRefExpr>(subexp))
+	   if(clang::ValueDecl *vdec=dyn_cast<clang::ValueDecl>(dexp->getDecl()))
+	     {
+	       clang::UnaryOperator::Opcode op=uop->getOpcode();
+	       
+	       //Expr is a function type ref
+	       if(vdec->getType().getTypePtr()->isFunctionType())
+		 {
+		   FunctionDecl *fdecl=vdec->getAsFunction();    
+		   id=_symbTab->lookupfunc(fdecl)->fid;
+		   return std::pair<unsigned,PtrType>(id,FUNTYPE);
+		 }
+	       id=_symbTab->lookupId(vdec);
+	       
 	      //else expr is a variable pointer
-	      switch(op){
-	      case UO_Deref:  
-		return std::pair<unsigned,PtrType>(id,PTRONE);
-		break;	    
-	      case UO_AddrOf:
-		return std::pair<unsigned,PtrType>(id,ADDR_OF);
-		break;
-	      default: break;                   
-	      }
-	    }
-    } 
-  else if(clang::DeclRefExpr *ref = clang::dyn_cast<clang::DeclRefExpr>(exp))  
-    {
-      if(clang::ValueDecl *vdec=dyn_cast<clang::ValueDecl>(ref->getDecl()))
-	{
-  	  id=_symbTab->lookupId(vdec);
-
+	       switch(op){
+	       case UO_Deref:  
+		 return std::pair<unsigned,PtrType>(id,PTRONE);
+		 break;	    
+	       case UO_AddrOf:
+		 return std::pair<unsigned,PtrType>(id,ADDR_OF);
+		 break;
+	       default: break;                   
+	       }
+	     }
+     } 
+   else if(clang::DeclRefExpr *ref = clang::dyn_cast<clang::DeclRefExpr>(exp))  
+     {
+       if(clang::ValueDecl *vdec=dyn_cast<clang::ValueDecl>(ref->getDecl()))
+	 {
+	   id=_symbTab->lookupId(vdec);
+	   
 	  //expr is a function pointer declaration
-	  if(vdec->getType().getTypePtr()->isFunctionPointerType())
-	    return std::pair<unsigned,PtrType>(id,FUNPTR);
+	   if(vdec->getType().getTypePtr()->isFunctionPointerType())
+	     return std::pair<unsigned,PtrType>(id,FUNPTR);
 
 	  // Function Type
-	  else if(vdec->getType().getTypePtr()->isFunctionType())
-	    {
-	      FunctionDecl *fdecl=vdec->getAsFunction();    
-	      id=_symbTab->lookupfunc(fdecl)->fid;
-	      return std::pair<unsigned,PtrType>(id,FUNTYPE);
-	    }
+	   else if(vdec->getType().getTypePtr()->isFunctionType())
+	     {
+	       FunctionDecl *fdecl=vdec->getAsFunction();    
+	       id=_symbTab->lookupfunc(fdecl)->fid;
+	       return std::pair<unsigned,PtrType>(id,FUNTYPE);
+	     }
 	  
 	  // expression is pointer type, but without dereference
-	  else if(vdec->getType()->isPointerType())
-	    return std::pair<unsigned,PtrType>(id,PTRZERO);           
+	   else if(vdec->getType()->isPointerType())
+	     return std::pair<unsigned,PtrType>(id,PTRZERO);           
 	  // else normal variable
-	  else  
-	    return std::pair<unsigned,PtrType>(id,NOPTR); 
-	}    
-    }   
-  return std::pair<unsigned,PtrType>(0,UNDEF);
+	   else  
+	     return std::pair<unsigned,PtrType>(id,NOPTR); 
+	 }    
+     }   
+   return std::pair<unsigned,PtrType>(0,UNDEF);
  }
 
 
- void updatePAonUnaryExpr(clang::UnaryOperator *uop)
+void SteengaardPAVisitor::updatePAonUnaryExpr(clang::UnaryOperator *uop)
  {
    clang::Expr *exp = uop->getSubExpr()->IgnoreImplicit();
    if(uop->isIncrementDecrementOp())
@@ -241,7 +200,7 @@ void storeGlobalPointers()
      }     
  }
     
- void updatePAonBinaryExpr(clang::BinaryOperator *bop)
+ void SteengaardPAVisitor::updatePAonBinaryExpr(clang::BinaryOperator *bop)
  {
    clang::BinaryOperator::Opcode opcode=bop->getOpcode();
    if(opcode==clang::BO_Assign)    
@@ -293,7 +252,7 @@ void storeGlobalPointers()
      }    
  }
 
- bool VisitStmt(Stmt *st) 
+ bool SteengaardPAVisitor::VisitStmt(Stmt *st) 
  {
    // Consider statements like int x or int x=10,y,z
    /*  if (DeclStmt *decl_stmt=dyn_cast<DeclStmt>(st)) {  
@@ -343,7 +302,7 @@ void storeGlobalPointers()
  }
 
 
- std::set<FunctionDecl *> getCallsFromFuncPtr(CallExpr *call)
+ std::set<FunctionDecl *> SteengaardPAVisitor::getCallsFromFuncPtr(CallExpr *call)
  {
    ArrayRef<Stmt*> children=call->getRawSubExprs();
    ArrayRef<Stmt*>::iterator I=children.begin();
@@ -369,20 +328,20 @@ void storeGlobalPointers()
  }
 
 
- void updatePAOnFuncCall(FunctionDecl *calleeDecl,std::set<Expr*> ActualInArgs,long ActualOutArg)
- {
-   FuncSignature * fsig=NULL;
-   fsig=_symbTab->lookupfunc(calleeDecl);       
-   if(fsig){
-     int i=0;
-     for(std::set<Expr*>::iterator it=ActualInArgs.begin();it!=ActualInArgs.end();it++,i++)       
-	 updatePABasedOnExpr(fsig->params[i],(*it)->IgnoreImplicit());
-     if(ActualOutArg>=0)
+void SteengaardPAVisitor::updatePAOnFuncCall(FunctionDecl *calleeDecl,std::set<Expr*> ActualInArgs,long ActualOutArg)
+{
+  FuncSignature * fsig=NULL;
+  fsig=_symbTab->lookupfunc(calleeDecl);       
+  if(fsig){
+    int i=0;
+    for(std::set<Expr*>::iterator it=ActualInArgs.begin();it!=ActualInArgs.end();it++,i++)       
+      updatePABasedOnExpr(fsig->params[i],(*it)->IgnoreImplicit());
+    if(ActualOutArg>=0)
        pa->ProcessAssignStmt(ActualOutArg,fsig->rets[0]);  // C funcion has only one return value
-   }
- }
+  }
+}
 
-void updatePAOnCallExpr(CallExpr *call,long ActOutArg)
+void SteengaardPAVisitor::updatePAOnCallExpr(CallExpr *call,long ActOutArg)
 {
   std::set<Expr*> ActualInArgs;
   for(clang::CallExpr::arg_iterator it=call->arg_begin();it!=call->arg_end();it++)
@@ -401,7 +360,7 @@ void updatePAOnCallExpr(CallExpr *call,long ActOutArg)
   else updatePAOnFuncCall(callee,ActualInArgs,ActOutArg);    
 }
 
-void updatePABasedOnExpr(unsigned id, Expr * exp)
+void SteengaardPAVisitor::updatePABasedOnExpr(unsigned id, Expr * exp)
 {
   std::pair<unsigned,PtrType> expTypePair=getExprIdandType(exp);
   if(expTypePair.second==PTRONE || expTypePair.second==PTRZERO)
@@ -417,7 +376,7 @@ void updatePABasedOnExpr(unsigned id, Expr * exp)
   else traverse_subExpr(exp);
 }
 
-bool traverse_subExpr(Expr * exp)
+bool SteengaardPAVisitor::traverse_subExpr(Expr * exp)
 { 
   if(exp->isIntegerConstantExpr(*astContext,NULL)) return true;
   if(clang::DeclRefExpr *dexpr=dyn_cast<clang::DeclRefExpr>(exp))
@@ -455,7 +414,7 @@ bool traverse_subExpr(Expr * exp)
 }
 
 // Store Global Variable Information
-bool VisitVarDecl(VarDecl *vDecl)
+bool SteengaardPAVisitor::VisitVarDecl(VarDecl *vDecl)
 {
   if(!astContext->getSourceManager().isInSystemHeader(vDecl->getLocStart())) 
     {
@@ -473,6 +432,3 @@ bool VisitVarDecl(VarDecl *vDecl)
   return true;
 }
  
-};
-
-#endif

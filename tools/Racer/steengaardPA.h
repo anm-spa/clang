@@ -1,4 +1,7 @@
-// $Id $
+/****************************************************************/
+/*          All rights reserved (it will be changed)            */
+/*          masud.abunaser@mdh.se                               */
+/****************************************************************/
 
 #ifndef STEENSGAARDPA_H_
 #define STEENSGAARDPA_H_

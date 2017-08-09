@@ -108,6 +108,15 @@ public:
     return globalWrite.end();
   }
 
+  void showGlobals()
+  {
+    errs()<<"List of global vars\n";
+    for(auto i=globals.begin();i!=globals.end();i++)
+      {
+	errs()<<(*i)<<"\n";
+      }  
+  }  
+
   void printGlobalRead()
   {
     VarsLocIter I=globalRead.begin(), E=globalRead.end();

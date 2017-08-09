@@ -1,6 +1,9 @@
+/****************************************************************/
+/*          All rights reserved (it will be changed)            */
+/*          masud.abunaser@mdh.se                               */
+/****************************************************************/
+
 #include "steengaardPA.h"
-//#include "CSteensgaardAnalysisBuilder.h"
-//#include "symtab/CSymTabBase.h"
 #include "macros.h"
 #include <ciso646>
 #include <stdexcept>

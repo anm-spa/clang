@@ -1,3 +1,8 @@
+/****************************************************************/
+/*          All rights reserved (it will be changed)            */
+/*          masud.abunaser@mdh.se                               */
+/****************************************************************/
+
 #include "clang/Driver/Options.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -40,11 +45,11 @@ public:
     visitorPA->initPA(visitorSymTab->getSymTab());
 
     visitorPA->TraverseDecl(Context.getTranslationUnitDecl());
-    
+    visitorPA->storeGlobalPointers();
     visitorPA->showPAInfo();   
+    visitorPA->getGvHandler()->showGlobals();
     }   
 };
-
 
 
 class RaceDetector : public ASTConsumer {
