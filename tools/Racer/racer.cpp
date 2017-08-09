@@ -9,7 +9,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
-#include "SteengaardPAVisitor.h"
+#include "steengaardPAVisitor.h"
 #include "RaceAnalysis.h"
 #include "headerDepAnalysis.h"
 

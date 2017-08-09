@@ -32,7 +32,7 @@ void SteengaardPAVisitor::rebuildPASet()
   analPointers=true;
 }
 
-void SteengaardPAVisitor::showPAInfo(bool prIntrls=false) 
+void SteengaardPAVisitor::showPAInfo(bool prIntrls) 
 {
   rebuildPASet();
   if(debugLabel>1)
@@ -53,7 +53,8 @@ void SteengaardPAVisitor::showVarReadWriteLoc()
   for(;it!=varMod.end();it++)
     {
       std::string var=((_symbTab->lookupSymb(it->second.first))->getVarDecl())->getNameAsString();
-      errs()<<" Accessed Var "<<var<<" at "<<it->first.printToString(astContext->getSourceManager())<<" : "<<printAccessType(it->second.second)<<"\n";   
+      std::string varAcc=it->second.second==RD ? "RD":(it->second.second==WR ? "WR": "RW");
+      errs()<<" Accessed Var "<<var<<" at "<<it->first.printToString(astContext->getSourceManager())<<" : "<<varAcc<<"\n";   
     }	  
 }
 

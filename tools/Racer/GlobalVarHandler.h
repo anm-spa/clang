@@ -13,11 +13,6 @@ typedef std::set<std::pair<std::string,std::string> >::iterator VarsLocIter;
 // maps program location to Var accessed and pointing to the global
 typedef std::map<std::string,std::pair<std::string,std::string> > MapType; 
 
-std::string printAccessType(AccessType acc)
-{
-  return acc==RD ? "RD":(acc==WR ? "WR": "RW");
-}
-
 class GlobalVarHandler
 {
 private:
