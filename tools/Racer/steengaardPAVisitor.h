@@ -32,11 +32,12 @@ private:
   SymTab<SymBase> *_symbTab;
   bool analPointers;                           
   FuncSignature * current_fs;
+  bool isVisitingFunc;
   std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >  varMod; 
   int debugLabel;
 public:
   explicit SteengaardPAVisitor(CompilerInstance *CI, int dl) 
-    : astContext(&(CI->getASTContext())), debugLabel(dl) // initialize private members
+    : astContext(&(CI->getASTContext())), isVisitingFunc(false), debugLabel(dl) // initialize private members
     {}
 
   void initPA(SymTab<SymBase> *symbTab);

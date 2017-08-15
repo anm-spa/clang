@@ -76,7 +76,10 @@ void SteengaardPAVisitor::storeGlobalPointers()
   std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
   for(;it!=varMod.end();it++)
     {
-      clang::ValueDecl *val=((_symbTab->lookupSymb(it->second.first))->getVarDecl());
+      clang::ValueDecl *val=NULL;
+      auto *sym=_symbTab->lookupSymb(it->second.first);
+      if(sym) val=sym->getVarDecl();
+      
       //std::string varAsLoc=val->getLocation()->printToString(astContext->getSourceManager());
       
       // if "var" points to a global variable or itself a global
@@ -87,8 +90,9 @@ void SteengaardPAVisitor::storeGlobalPointers()
 	  
 	  // loc is the location where "var" is accessed, and "vCurr" is the variable name
 	  std::string loc=it->first.printToString(astContext->getSourceManager());
-	  std::string vCurr=val->getNameAsString();
-
+	  std::string vCurr;
+	  if(val) vCurr=val->getNameAsString();
+	  else vCurr="You should not get this name";
 	  // get all "vars" that "var" points 
 	  pa->GetPointsToVars(it->second.first,&vars_pointed_to);
 
@@ -122,7 +126,8 @@ void SteengaardPAVisitor::storeGlobalPointers()
 
 bool SteengaardPAVisitor::VisitFunctionDecl(FunctionDecl *func) {
   if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart())){
-    current_fs=_symbTab->lookupfunc(func);       
+    current_fs=_symbTab->lookupfunc(func);
+    isVisitingFunc=true;
   }
   return true;
 }
@@ -283,10 +288,13 @@ void SteengaardPAVisitor::updatePAonUnaryExpr(clang::UnaryOperator *uop)
     updatePAOnCallExpr(call,-1);
   }
 
-  else if (ReturnStmt *rtst = dyn_cast<ReturnStmt>(st)) {
-    Expr *retexpr=rtst->getRetValue()->IgnoreImplicit();
-    unsigned id=current_fs->rets[0];
-    updatePABasedOnExpr(id,retexpr);   
+  else if ((ReturnStmt *rtst = dyn_cast<ReturnStmt>(st)) && isVisitingFunc) {
+    if(rtst->getRetValue()){
+      Expr *retexpr=rtst->getRetValue()->IgnoreImplicit();
+      unsigned id=current_fs->rets[0];
+      updatePABasedOnExpr(id,retexpr);
+    }
+    isVisitingFunc=false;
   }  
   else if (IfStmt *ifstmt = dyn_cast<IfStmt>(st)) {
     traverse_subExpr(ifstmt->getCond()->IgnoreImplicit());
