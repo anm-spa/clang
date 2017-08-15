@@ -288,8 +288,8 @@ void SteengaardPAVisitor::updatePAonUnaryExpr(clang::UnaryOperator *uop)
     updatePAOnCallExpr(call,-1);
   }
 
-  else if ((ReturnStmt *rtst = dyn_cast<ReturnStmt>(st)) && isVisitingFunc) {
-    if(rtst->getRetValue()){
+  else if (ReturnStmt *rtst = dyn_cast<ReturnStmt>(st)) {
+    if(rtst->getRetValue() && isVisitingFunc){
       Expr *retexpr=rtst->getRetValue()->IgnoreImplicit();
       unsigned id=current_fs->rets[0];
       updatePABasedOnExpr(id,retexpr);
