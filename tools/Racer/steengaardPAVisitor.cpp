@@ -4,7 +4,7 @@
 /****************************************************************/
 
 #include "steengaardPAVisitor.h"
-#include <cassert>
+
 void SteengaardPAVisitor::initPA(SymTab<SymBase> *symbTab)
 {
   _symbTab=symbTab;

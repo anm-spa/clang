@@ -12,7 +12,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "steengaardPA.h"
-#include "GlobalVarHandler.h"
+#include "globalVarHandler.h"
 #include "symTabBuilder.h"
 
 // CFG related issue
@@ -20,6 +20,7 @@
 #include <vector>
 #include <algorithm>
 #include<map>
+#include <cassert>
 
 using namespace std;
 using namespace clang;

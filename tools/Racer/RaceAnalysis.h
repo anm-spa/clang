@@ -1,7 +1,7 @@
 #ifndef RACEANALYSIS_H_
 #define RACEANALYSIS_H_
 
-#include "GlobalVarHandler.h"
+#include "globalVarHandler.h"
 #include <vector>
 #include <cassert>
 

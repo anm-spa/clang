@@ -17,6 +17,8 @@ add_clang_executable(racer
   steengaardPA.h
   steengaardPAVisitor.h
   steengaardPAVisitor.cpp
+  globalVarHandler.cpp
+  globalVarHandler.h
   macros.h
   symTabBuilder.h
   symtab.cpp

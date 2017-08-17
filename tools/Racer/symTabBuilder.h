@@ -1,3 +1,8 @@
+/****************************************************************/
+/*          All rights reserved (it will be changed)            */
+/*          masud.abunaser@mdh.se                               */
+/****************************************************************/
+
 #include "symtab.h"
 using namespace llvm;
 
