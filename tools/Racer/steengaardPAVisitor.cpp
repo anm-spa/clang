@@ -4,7 +4,7 @@
 /****************************************************************/
 
 #include "steengaardPAVisitor.h"
-
+#include <cassert>
 void SteengaardPAVisitor::initPA(SymTab<SymBase> *symbTab)
 {
   _symbTab=symbTab;
@@ -125,11 +125,11 @@ void SteengaardPAVisitor::storeGlobalPointers()
 }
 
 bool SteengaardPAVisitor::VisitFunctionDecl(FunctionDecl *func) {
-  if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart())){
+  //if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart())){
     current_fs=_symbTab->lookupfunc(func);
     isVisitingFunc=true;
-  }
-  return true;
+    //}
+    return true;
 }
   
 std::pair<unsigned,PtrType> SteengaardPAVisitor::getExprIdandType(clang::Expr *exp)
@@ -294,18 +294,21 @@ void SteengaardPAVisitor::updatePAonUnaryExpr(clang::UnaryOperator *uop)
       unsigned id=current_fs->rets[0];
       updatePABasedOnExpr(id,retexpr);
     }
-    isVisitingFunc=false;
+    if(isVisitingFunc) isVisitingFunc=false;
   }  
   else if (IfStmt *ifstmt = dyn_cast<IfStmt>(st)) {
-    traverse_subExpr(ifstmt->getCond()->IgnoreImplicit());
+    Expr *ifexp=ifstmt->getCond();
+    if(ifexp) traverse_subExpr(ifexp->IgnoreImplicit());
   }  
   else if (ForStmt *forstmt = dyn_cast<ForStmt>(st)) 
   {
-    traverse_subExpr(forstmt->getCond()->IgnoreImplicit());
+    Expr *forexp=forstmt->getCond();
+    if(forexp) traverse_subExpr(forexp->IgnoreImplicit());
   }
   else if(WhileStmt *whilestmt = dyn_cast<WhileStmt>(st)) 
   {
-    traverse_subExpr(whilestmt->getCond()->IgnoreImplicit());
+    Expr *whileexp=whilestmt->getCond();
+    if(whileexp) traverse_subExpr(whileexp->IgnoreImplicit());
   }
    return true;
  }
@@ -387,6 +390,7 @@ void SteengaardPAVisitor::updatePABasedOnExpr(unsigned id, Expr * exp)
 
 bool SteengaardPAVisitor::traverse_subExpr(Expr * exp)
 { 
+  assert(exp!=NULL);
   if(exp->isIntegerConstantExpr(*astContext,NULL)) return true;
   if(clang::DeclRefExpr *dexpr=dyn_cast<clang::DeclRefExpr>(exp))
     {

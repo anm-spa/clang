@@ -31,8 +31,8 @@ private:
   SymTabBuilderVisitor *visitorSymTab;
 public:
     // override the constructor in order to pass CI
-    explicit PointerAnalysis(CompilerInstance *CI)
-      : visitorPA(new SteengaardPAVisitor(CI,debugLabel)),visitorSymTab(new SymTabBuilderVisitor(CI,debugLabel))
+  explicit PointerAnalysis(CompilerInstance *CI,std::string file)
+    : visitorPA(new SteengaardPAVisitor(CI,debugLabel,file)),visitorSymTab(new SymTabBuilderVisitor(CI,debugLabel))
   {
   }
 
@@ -58,8 +58,8 @@ private:
   SymTabBuilderVisitor *visitorSymTab;
 public:
     // override the constructor in order to pass CI
-    explicit RaceDetector(CompilerInstance *CI)
-      : visitorPA(new SteengaardPAVisitor(CI,debugLabel)),visitorSymTab(new SymTabBuilderVisitor(CI, debugLabel))
+  explicit RaceDetector(CompilerInstance *CI, std::string file)
+    : visitorPA(new SteengaardPAVisitor(CI,debugLabel,file)),visitorSymTab(new SymTabBuilderVisitor(CI, debugLabel))
       {
       }
 
@@ -83,7 +83,7 @@ class PAFrontendAction : public ASTFrontendAction {
  public:
   virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)   {
     std::cout<<"Pointer Analysis of "<<file.str()<<"\n";
-    return llvm::make_unique<PointerAnalysis>(&CI); // pass CI pointer to ASTConsumer
+    return llvm::make_unique<PointerAnalysis>(&CI,file.str()); // pass CI pointer to ASTConsumer
    }
 };
 
@@ -91,7 +91,7 @@ class PAFrontendAction : public ASTFrontendAction {
 class RacerFrontendAction : public ASTFrontendAction {
  public:
   virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)   {
-    return llvm::make_unique<RaceDetector>(&CI); // pass CI pointer to ASTConsumer
+    return llvm::make_unique<RaceDetector>(&CI,file.str()); // pass CI pointer to ASTConsumer
     //return llvm::make_unique<CallGraphASTConsumer>(&CI); // pass CI pointer to ASTConsumer	
    }
 };

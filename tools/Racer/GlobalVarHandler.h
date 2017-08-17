@@ -19,13 +19,14 @@ private:
   std::set<string> globals;   // Set of all global Vars in a translation unit            
   std::map<unsigned,string> globalVarMap;
   std::set<unsigned> globalVarId;
+  std::string mainFile;
   VarsLoc globalRead;
   VarsLoc globalWrite;
 
   // locToVarPairMap.second.first points to locToVarPairMap.second.second at locToVarPairMap.first
   MapType locToVarPairMap;
 public:
-  GlobalVarHandler(){}
+  GlobalVarHandler(std::string f){mainFile=f;}
   ~GlobalVarHandler(){}
   
   void insert(unsigned var, string loc){ 
@@ -33,8 +34,10 @@ public:
     globalVarId.insert(var);
     globalVarMap.insert(std::pair<unsigned,string>(var,loc));
   }
-
-  
+  std::string getTUName()
+    {
+      return mainFile;
+    }
   std::string getVarAsLoc(unsigned var)
   {
     // var should be from the globals set
@@ -136,13 +139,13 @@ public:
     }
    }
 
-  bool showVarReadWriteLoc(std::string loc)
+  bool showVarAccessLoc(std::string loc, std::string accMod)
   {
     std::pair <MapType::iterator, MapType::iterator> range;
     range = locToVarPairMap.equal_range(loc);
     if(range.first==locToVarPairMap.end()) return false;
     for (MapType::iterator irange = range.first; irange != range.second; ++irange)
-      errs()<< irange->second.first <<"->"<<irange->second.second<<" @\t"<<loc<<"\n";
+      errs()<<"["<<accMod<<", Loc:"<<loc<<"]:\t"<< irange->second.first <<"->"<<irange->second.second<<"\n";
     return true;
   }
 

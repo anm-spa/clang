@@ -36,8 +36,8 @@ private:
   std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >  varMod; 
   int debugLabel;
 public:
-  explicit SteengaardPAVisitor(CompilerInstance *CI, int dl) 
-    : astContext(&(CI->getASTContext())), isVisitingFunc(false), debugLabel(dl) // initialize private members
+  explicit SteengaardPAVisitor(CompilerInstance *CI, int dl,std::string file) 
+    : astContext(&(CI->getASTContext())), gv(file), isVisitingFunc(false), debugLabel(dl) // initialize private members
     {}
 
   void initPA(SymTab<SymBase> *symbTab);

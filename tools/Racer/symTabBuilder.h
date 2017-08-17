@@ -24,7 +24,7 @@ public:
  bool VisitFunctionDecl(FunctionDecl *func) 
  {
    
-   if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart()))
+   // if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart()))
      {
        current_f=func;
        std::string fname;
