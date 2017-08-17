@@ -12,18 +12,20 @@ set( LLVM_LINK_COMPONENTS
 #)
 
 add_clang_executable(racer
+  globalVarHandler.h
+  globalVarHandler.cpp
+  macros.h	
   racer.cpp
-  steengaardPA.cpp
+  raceAnalysis.h
+  raceAnalysis.cpp
   steengaardPA.h
+  steengaardPA.cpp
   steengaardPAVisitor.h
   steengaardPAVisitor.cpp
-  globalVarHandler.cpp
-  globalVarHandler.h
-  macros.h
-  symTabBuilder.h
-  symtab.cpp
   symtab.h
-  RaceAnalysis.h
+  symtab.cpp
+  symTabBuilder.h
+  symTabBuilder.cpp  
   )
 
 #add_clang_executable(cgwpa

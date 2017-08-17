@@ -10,7 +10,7 @@
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 #include "steengaardPAVisitor.h"
-#include "RaceAnalysis.h"
+#include "raceAnalysis.h"
 #include "headerDepAnalysis.h"
 
 using namespace clang::driver;
