@@ -12,10 +12,34 @@
 #include "steengaardPAVisitor.h"
 #include "raceAnalysis.h"
 #include "headerDepAnalysis.h"
+#include "callGraphAnalysis.h"
 
 using namespace clang::driver;
 using namespace clang::tooling;
 using namespace llvm;
+
+static cl::OptionCategory RacerOptCat("Static Analysis Options");
+static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
+static cl::extrahelp MoreHelp("\nMore help text...");
+
+static cl::opt<bool> Symb("sym",cl::desc("Build and dump the Symbol Table"), cl::cat(RacerOptCat));
+static cl::opt<bool> PA("pa",cl::desc("show pointer analysis info"), cl::cat(RacerOptCat));
+static cl::opt<bool> HA("ha",cl::desc("show header analysis info"), cl::cat(RacerOptCat));
+static cl::opt<bool> CG("cg",cl::desc("Call Graph Info"), cl::cat(RacerOptCat));
+static cl::opt<std::string> FUNC1("m1",cl::desc("Initial method from which execution starts"), cl::value_desc("function name"),cl::cat(RacerOptCat));
+static cl::opt<std::string> FUNC2("m2",cl::desc("Initial method from which execution starts"), cl::value_desc("function name"),cl::cat(RacerOptCat));
+
+static cl::opt<bool> RA("ra",cl::desc("Data race analysis"), cl::cat(RacerOptCat));
+
+enum DLevel {
+  O, O1, O2, O3
+};
+cl::opt<DLevel> DebugLevel("dl", cl::desc("Choose Debug level:"),
+  cl::values(
+	     clEnumValN(O, "none", "No debugging"),
+	     clEnumVal(O1, "Minimal debug info"),
+	     clEnumVal(O2, "Expected debug info"),
+	     clEnumVal(O3, "Extended debug info")), cl::cat(RacerOptCat));
 
 RaceFinder *racer=new RaceFinder();
 int debugLabel=0;
@@ -41,12 +65,15 @@ public:
     
     visitorSymTab->TraverseDecl(Context.getTranslationUnitDecl());
     visitorSymTab->dumpSymTab();
-    
+    errs()<<"building initPA\n";
     visitorPA->initPA(visitorSymTab->getSymTab());
-
+    errs()<<"Traverse Decl\n";
     visitorPA->TraverseDecl(Context.getTranslationUnitDecl());
+    errs()<<"Store Global Pointer\n";
     visitorPA->storeGlobalPointers();
-    visitorPA->showPAInfo();   
+    errs()<<"show PA\n";
+    visitorPA->showPAInfo();
+    errs()<<"Show globals\n";
     visitorPA->getGvHandler()->showGlobals();
     }   
 };
@@ -87,6 +114,17 @@ class PAFrontendAction : public ASTFrontendAction {
    }
 };
 
+class CGFrontendAction : public ASTFrontendAction {
+ public:
+  virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)   {
+    std::cout<<"Building Call Graph of "<<file.str()<<"\n";
+    std::ofstream Method1(FUNC1.c_str()), Method2(FUNC2.c_str());
+    if (Method1.good() && Method2.good()) //errs()<<"Method Name :"<<FUNC.c_str()<<"\n";
+      return llvm::make_unique<CallGraphReachabilityInferance>(&CI,FUNC1.c_str(),FUNC2.c_str()); 
+    else return llvm::make_unique<CGReachabilityInf>(&CI);
+   }
+};
+
 
 class RacerFrontendAction : public ASTFrontendAction {
  public:
@@ -103,24 +141,6 @@ class SymbTabAction : public ASTFrontendAction {
      }
 };
 
-
-static cl::OptionCategory RacerOptCat("Static Analysis Options");
-static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
-static cl::extrahelp MoreHelp("\nMore help text...");
-
-static cl::opt<bool> Symb("sym",cl::desc("Build and dump the Symbol Table"), cl::cat(RacerOptCat));
-static cl::opt<bool> PA("pa",cl::desc("show pointer analysis info"), cl::cat(RacerOptCat));
-static cl::opt<bool> HA("ha",cl::desc("show header analysis info"), cl::cat(RacerOptCat));
-enum DLevel {
-  O, O1, O2, O3
-};
-cl::opt<DLevel> DebugLevel("dl", cl::desc("Choose Debug level:"),
-  cl::values(
-	     clEnumValN(O, "none", "No debugging"),
-	     clEnumVal(O1, "Minimal debug info"),
-	     clEnumVal(O2, "Expected debug info"),
-	     clEnumVal(O3, "Extended debug info")), cl::cat(RacerOptCat));
-
 int main(int argc, const char **argv) {
     // parse the command-line args passed to your code 
 
@@ -133,7 +153,11 @@ int main(int argc, const char **argv) {
     if(DebugLevel==O1) debugLabel=1;
     else if(DebugLevel==O2) debugLabel=2;
     else if(DebugLevel==O3) debugLabel=3;
-    
+    if(!Symb && !PA && !HA && !CG && !RA)
+    { 
+      errs()<<"Analysis options are not provided. See, e.g., racer --help\n";
+      return 0;
+    }  
     if(Symb) result = Tool.run(newFrontendActionFactory<SymbTabAction>().get());
     if(PA) result = Tool.run(newFrontendActionFactory<PAFrontendAction>().get());
     if(HA) {
@@ -146,9 +170,17 @@ int main(int argc, const char **argv) {
        ClangTool Tool1(op.getCompilations(), hFiles);
        result = Tool1.run(newFrontendActionFactory<PAFrontendAction>().get());
     }
-    if(!Symb && !PA && !HA){
+    if(CG){
+      
+      result=Tool.run(newFrontendActionFactory<CGFrontendAction>().get());
+    }
+    if(RA){
+      if(op.getSourcePathList().size()!=2) 
+      {
+	errs()<<"Command Format Error, exactly two sources are required to run the command. See, e.g. racer --help\n";
+	return 0;	  
+      }
       result = Tool.run(newFrontendActionFactory<RacerFrontendAction>().get());
-      //analysisInfo->extractPossibleRaces();
       racer->extractPossibleRaces();
     }
 

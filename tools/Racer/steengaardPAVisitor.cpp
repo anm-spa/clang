@@ -273,14 +273,9 @@ void SteengaardPAVisitor::updatePAonUnaryExpr(clang::UnaryOperator *uop)
      }//forEnd
    } */   
    if (clang::BinaryOperator *bop=dyn_cast<clang::BinaryOperator>(st))
-    { 
-      updatePAonBinaryExpr(bop); 
-    }
- 
-  else if (clang::UnaryOperator *uop=dyn_cast<clang::UnaryOperator>(st))
-    { 
-      updatePAonUnaryExpr(uop);
-    } 
+     updatePAonBinaryExpr(bop); 
+   else if (clang::UnaryOperator *uop=dyn_cast<clang::UnaryOperator>(st))
+     updatePAonUnaryExpr(uop);
 
    // Update PA for function calls
    // if x=f(Args), this st is processed by both updatePAOnCallExpr and updatePAonBinaryExpr
