@@ -26,9 +26,9 @@ private:
   std::string endFunc;
   std::multimap<std::string, std::pair<std::string, bool> > parentOf;
 public:
-    explicit CallGraphASTConsumer(CompilerInstance *CI)
+    explicit CGReachabilityInf(CompilerInstance *CI)
     {startFunc="none";endFunc="none";}
-    explicit CallGraphASTConsumer(CompilerInstance *CI, std::string func1, std::string func2)
+    explicit CGReachabilityInf(CompilerInstance *CI, std::string func1, std::string func2)
     {startFunc=func1;endFunc=func2;}
 
     bool isnameOfNode(CallGraphNode *currNode,std::string ef)

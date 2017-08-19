@@ -120,7 +120,7 @@ class CGFrontendAction : public ASTFrontendAction {
     std::cout<<"Building Call Graph of "<<file.str()<<"\n";
     std::ofstream Method1(FUNC1.c_str()), Method2(FUNC2.c_str());
     if (Method1.good() && Method2.good()) //errs()<<"Method Name :"<<FUNC.c_str()<<"\n";
-      return llvm::make_unique<CallGraphReachabilityInferance>(&CI,FUNC1.c_str(),FUNC2.c_str()); 
+      return llvm::make_unique<CGReachabilityInf>(&CI,FUNC1.c_str(),FUNC2.c_str()); 
     else return llvm::make_unique<CGReachabilityInf>(&CI);
    }
 };
