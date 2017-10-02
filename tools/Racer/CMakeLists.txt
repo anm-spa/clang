@@ -27,6 +27,10 @@ add_clang_executable(racer
   symtab.cpp
   symTabBuilder.h
   symTabBuilder.cpp  
+  CGFrontendAction.h
+  libExt/CompilerInstanceCtu.h
+  libExt/CallGraphCtu.h
+  libExt/CallGraphCtu.cpp
   )
 
 #add_clang_executable(cgwpa

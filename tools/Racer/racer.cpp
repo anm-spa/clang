@@ -7,39 +7,21 @@
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Tooling/CommonOptionsParser.h"
+#include "libExt/CompilerInstanceCtu.h"
+#include "libExt/CallGraphCtu.h"
 #include "clang/Tooling/Tooling.h"
+#include "clang/Sema/Sema.h"
 #include "steengaardPAVisitor.h"
 #include "raceAnalysis.h"
 #include "headerDepAnalysis.h"
 #include "callGraphAnalysis.h"
-
+#include "CGFrontendAction.h"
+#include "commandOptions.h"
+#include <memory>
 using namespace clang::driver;
 using namespace clang::tooling;
 using namespace llvm;
 
-static cl::OptionCategory RacerOptCat("Static Analysis Options");
-static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
-static cl::extrahelp MoreHelp("\nMore help text...");
-
-static cl::opt<bool> Symb("sym",cl::desc("Build and dump the Symbol Table"), cl::cat(RacerOptCat));
-static cl::opt<bool> PA("pa",cl::desc("show pointer analysis info"), cl::cat(RacerOptCat));
-static cl::opt<bool> HA("ha",cl::desc("show header analysis info"), cl::cat(RacerOptCat));
-static cl::opt<bool> CG("cg",cl::desc("Call Graph Info"), cl::cat(RacerOptCat));
-static cl::opt<std::string> FUNC1("m1",cl::desc("Initial method from which execution starts"), cl::value_desc("function name"),cl::cat(RacerOptCat));
-static cl::opt<std::string> FUNC2("m2",cl::desc("Initial method from which execution starts"), cl::value_desc("function name"),cl::cat(RacerOptCat));
-
-static cl::opt<bool> RA("ra",cl::desc("Data race analysis"), cl::cat(RacerOptCat));
-
-enum DLevel {
-  O, O1, O2, O3
-};
-cl::opt<DLevel> DebugLevel("dl", cl::desc("Choose Debug level:"),
-  cl::values(
-	     clEnumValN(O, "none", "No debugging"),
-	     clEnumVal(O1, "Minimal debug info"),
-	     clEnumVal(O2, "Expected debug info"),
-	     clEnumVal(O3, "Extended debug info")), cl::cat(RacerOptCat));
 
 RaceFinder *racer=new RaceFinder();
 int debugLabel=0;
@@ -114,16 +96,6 @@ class PAFrontendAction : public ASTFrontendAction {
    }
 };
 
-class CGFrontendAction : public ASTFrontendAction {
- public:
-  virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)   {
-    std::cout<<"Building Call Graph of "<<file.str()<<"\n";
-    std::ofstream Method1(FUNC1.c_str()), Method2(FUNC2.c_str());
-    if (Method1.good() && Method2.good()) //errs()<<"Method Name :"<<FUNC.c_str()<<"\n";
-      return llvm::make_unique<CGReachabilityInf>(&CI,FUNC1.c_str(),FUNC2.c_str()); 
-    else return llvm::make_unique<CGReachabilityInf>(&CI);
-   }
-};
 
 
 class RacerFrontendAction : public ASTFrontendAction {
@@ -140,6 +112,48 @@ class SymbTabAction : public ASTFrontendAction {
       return llvm::make_unique<SymTabBuilder>(&CI,debugLabel);
      }
 };
+
+
+class CGFrontendFactory : public clang::tooling::FrontendActionFactory {
+
+    CallGraph &_cg;
+    std::vector<std::unique_ptr<clang::CompilerInstanceCtu>> *astL;
+public:
+  CGFrontendFactory (CallGraph &cg, std::vector<std::unique_ptr<clang::CompilerInstanceCtu>> &ast)
+    : _cg (cg) { astL=&ast;}
+
+    virtual clang::FrontendAction *create () {
+      return new CGFrontendAction(_cg);
+    }
+
+    bool runInvocation(
+    std::shared_ptr<CompilerInvocation> Invocation, FileManager *Files,
+    std::shared_ptr<PCHContainerOperations> PCHContainerOps,
+    DiagnosticConsumer *DiagConsumer) {
+      // Create a compiler instance to handle the actual work.
+      std::unique_ptr<clang::CompilerInstanceCtu> Compiler=llvm::make_unique<clang::CompilerInstanceCtu>   (std::move(PCHContainerOps));
+      Compiler->setInvocation(std::move(Invocation));
+      Compiler->setFileManager(Files);
+
+      // The FrontendAction can have lifetime requirements for Compiler or its
+      // members, and we need to ensure it's deleted earlier than Compiler. So we
+      // pass it to an std::unique_ptr declared after the Compiler variable.
+  
+      std::unique_ptr<FrontendAction> ScopedToolAction(create());
+   
+      // Create the compiler's actual diagnostics engine.
+      Compiler->createDiagnostics(DiagConsumer, /*ShouldOwnClient=*/false);
+      if (!Compiler->hasDiagnostics())
+	return false;
+      Compiler->createSourceManager(*Files);
+      Compiler->setFrontendAction(ScopedToolAction.get());
+      const bool Success = Compiler->ExecuteActionCtu(*ScopedToolAction);
+      astL->push_back(std::move(Compiler));
+      Files->clearStatCaches();
+      return Success;
+    }
+};
+
 
 int main(int argc, const char **argv) {
     // parse the command-line args passed to your code 
@@ -166,13 +180,23 @@ int main(int argc, const char **argv) {
        Tool.run(&act);
        std::vector<std::string> hFiles=repo.getHeaderFiles();
        repo.printHeaderList();
-
        ClangTool Tool1(op.getCompilations(), hFiles);
        result = Tool1.run(newFrontendActionFactory<PAFrontendAction>().get());
     }
     if(CG){
-      
-      result=Tool.run(newFrontendActionFactory<CGFrontendAction>().get());
+      CallGraph cg;
+      std::vector<std::unique_ptr<clang::CompilerInstanceCtu> > vectCI;
+      CGFrontendFactory cgFact(cg,vectCI);
+      result=Tool.run(&cgFact);
+      cg.finishGraphConstruction();
+      cg.viewGraph();
+      for(auto it=vectCI.begin();it!=vectCI.end();it++)
+	{
+	  FrontendAction *fact=(*it)->getFrontendAction();
+	  if(CGFrontendAction *cgFrontend=static_cast<CGFrontendAction *>(fact)) 
+	    cgFrontend->EndFrontendAction();
+	  it->get()->EndCompilerActionOnSourceFile();
+	}
     }
     if(RA){
       if(op.getSourcePathList().size()!=2) 

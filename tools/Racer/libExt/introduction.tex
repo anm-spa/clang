@@ -1,0 +1,42 @@
+Kahoot(it)
+
+should it be context sensitive???
+
+
+Flow sensitive pointer analysis is required by many program analysis tools. Flow-insensitive analysis is still the dominant pointer analysis that is quite scalable. We are interested to apply flow sensitive analysis across translation units. 
+
+
+What is points-to graph?
+
+
+Challenges in cross translation unit:
+
+Flow sensitive pointer analysis requires to have the complete control flow available during the analysis. But, modern program analysis framework like clang frontend works by creating a compiler instance to process each translation unit. Thus, only one translation unit is available during the lifetime of each compiler instance and the current translation unit may have function/method calls from another translation unit. Thus, the pointer analysis need to work with the partial control flow of the programs.
+
+Flow insensitive pointer analysis typically stores points-to graph for each method. On the other hand, flow sensitive pointer analysis requires storing two points-to graph at each node (lots of nodes at each points-to graph), thus store a lots of information, and takes a lot of processing time.  
+
+In order to reduce the flow of information, some techniques like sparse flow of information is used (elaborate it).
+
+  
+
+
+Approaches to be used by cross translation unit support:
+
+
+Consider building function summary:
+
+
+Step 1: Use some flow insensitive points-to analysis to build use-def chain
+
+step 2: use iterative data-flow analysis framework through the use-def chain.
+        create halt-point in which function def is not available
+        restart analysis from the so called halt-point.
+        store points-to graph at some specific program point(L), and between program point compute points-to information relative with the closest Lm point(L), and between program point compute points-to information relative with the closest L.
+
+
+
+Implementation in Clang:
+
+           1. steengaard's points-to analysis 
+           2. use-def chain (requires implementation)
+           3. perform iterative analysis (require analysis) 

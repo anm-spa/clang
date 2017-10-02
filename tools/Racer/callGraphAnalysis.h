@@ -1,3 +1,11 @@
+/****************************************************************/
+/*          All rights reserved (it will be changed)            */
+/*          masud.abunaser@mdh.se                               */
+/****************************************************************/
+
+#ifndef LLVM_CLANG_CALLGRAPHANALYSIS_H
+#define LLVM_CLANG_CALLGRAPHANALYSIS_H
+
 #include "clang/AST/AST.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/ASTContext.h"
@@ -6,7 +14,9 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Tooling/CommonOptionsParser.h"
-#include "clang/Analysis/CallGraph.h"
+
+#include "libExt/CallGraphCtu.h"
+
 #include "clang/Analysis/AnalysisContext.h"
 #include <queue>
 #include <set>
@@ -21,15 +31,15 @@ using namespace llvm;
 
 class CGReachabilityInf : public ASTConsumer {
 private:
-  CallGraph CG;
+  CallGraph &CG;
   std::string startFunc;
   std::string endFunc;
   std::multimap<std::string, std::pair<std::string, bool> > parentOf;
 public:
-    explicit CGReachabilityInf(CompilerInstance *CI)
-    {startFunc="none";endFunc="none";}
-    explicit CGReachabilityInf(CompilerInstance *CI, std::string func1, std::string func2)
-    {startFunc=func1;endFunc=func2;}
+  explicit CGReachabilityInf(CompilerInstance *CI,CallGraph &g) : CG(g)
+  {startFunc="none";endFunc="none";}
+  explicit CGReachabilityInf(CompilerInstance *CI, std::string func1, std::string func2,CallGraph &g):CG(g)
+  {startFunc=func1;endFunc=func2;}
 
     bool isnameOfNode(CallGraphNode *currNode,std::string ef)
     {
@@ -72,6 +82,8 @@ public:
       return NULL;
     }
 
+
+    // At present it assumes that 
     bool getReachablePath(std::string from, std::string to)
     {
       std::pair <std::multimap<std::string, std::pair<std::string, bool> >::iterator, std::multimap<std::string,std::pair<std::string, bool> >::iterator > range;
@@ -104,12 +116,11 @@ public:
     virtual void HandleTranslationUnit(ASTContext &Context) {     
       TranslationUnitDecl *tu=Context.getTranslationUnitDecl();
       CG.addToCallGraph(tu);
-      if(CallGraphNode *startNode=getCallGraphNode(CG.getRoot(), startFunc, 0))
+      /*  if(CallGraphNode *startNode=getCallGraphNode(CG.getRoot(), startFunc, 0))
 	if(getCallGraphNode(startNode, endFunc, 1))
-	  getReachablePath(startFunc, endFunc);
-      CG.viewGraph();	
+	getReachablePath(startFunc, endFunc);*/
     }   
-
-    
+   
 };
 
+#endif
