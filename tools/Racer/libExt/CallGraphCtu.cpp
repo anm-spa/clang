@@ -16,6 +16,8 @@
 //  This file defines the AST-based CallGraph.
 //
 //===----------------------------------------------------------------------===//
+
+
 #include "libExt/CallGraphCtu.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -25,6 +27,7 @@
 #include "llvm/Support/GraphWriter.h"
 
 using namespace clang;
+
 
 #define DEBUG_TYPE "CallGraph"
 
@@ -37,25 +40,33 @@ namespace {
 class CGBuilder : public StmtVisitor<CGBuilder> {
   CallGraphCtu *G;
   CallGraphNode *CallerNode;
-
+  SteengaardPAVisitor *PA;
 public:
-  CGBuilder(CallGraphCtu *g, CallGraphNode *N)
-    : G(g), CallerNode(N) {}
+  CGBuilder(CallGraphCtu *g, CallGraphNode *N, SteengaardPAVisitor *pa)
+    : G(g), CallerNode(N), PA(pa) {}
 
   void VisitStmt(Stmt *S) { VisitChildren(S); }
 
-  Decl *getDeclFromCall(CallExpr *CE) {
+  std::set<Decl *> getDeclFromCall(CallExpr *CE) {
+    std::set<Decl *> DSet;
     if (FunctionDecl *CalleeDecl = CE->getDirectCallee())
-      return CalleeDecl;
-
+      DSet.insert(CalleeDecl);
+    if(PA){
+      std::set<FunctionDecl *> FDSet=PA->getCallsFromFuncPtr(CE);
+      for(std::set<FunctionDecl *>::iterator it=FDSet.begin();it!=FDSet.end();it++)  
+	DSet.insert(*it);
+    }  
+    else
+      llvm::errs()<<"PA not found\n";
+    
     // Simple detection of a call through a block.
     Expr *CEE = CE->getCallee()->IgnoreParenImpCasts();
     if (BlockExpr *Block = dyn_cast<BlockExpr>(CEE)) {
       NumBlockCallEdges++;
-      return Block->getBlockDecl();
+      DSet.insert(Block->getBlockDecl());
     }
 
-    return nullptr;
+    return DSet;
   }
 
   void addCalledDecl(Decl *D) {
@@ -73,8 +84,9 @@ public:
   }
 
   void VisitCallExpr(CallExpr *CE) {
-    if (Decl *D = getDeclFromCall(CE)) 
-      addCalledDecl(D);
+    std::set<Decl *> FDSet=getDeclFromCall(CE);
+    for(std::set<Decl *>::iterator it=FDSet.begin();it!=FDSet.end();it++)  
+      addCalledDecl(*it);
     VisitChildren(CE);
   }
 
@@ -146,7 +158,7 @@ void CallGraphCtu::addNodeForDecl(Decl* D, bool IsGlobal) {
   CallGraphNode *Node = getOrInsertNode(D);
   addDeclToExport(Node);
   // Process all the calls by this function as well.
-  CGBuilder builder(this, Node);
+  CGBuilder builder(this, Node,getPA());
   if (Stmt *Body = D->getBody())
     builder.Visit(Body);
 }

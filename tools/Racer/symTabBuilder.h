@@ -2,6 +2,11 @@
 /*          All rights reserved (it will be changed)            */
 /*          masud.abunaser@mdh.se                               */
 /****************************************************************/
+
+
+#ifndef LLVM_CLANG_SYMTABBUILDER_H
+#define LLVM_CLANG_SYMTABBUILDER_H
+
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -38,3 +43,5 @@ public:
   }   
     
 };
+
+#endif

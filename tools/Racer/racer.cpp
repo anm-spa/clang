@@ -12,6 +12,7 @@
 #include "clang/Tooling/Tooling.h"
 #include "clang/Sema/Sema.h"
 #include "steengaardPAVisitor.h"
+#include "symTabBuilder.h"
 #include "raceAnalysis.h"
 #include "headerDepAnalysis.h"
 #include "callGraphAnalysis.h"

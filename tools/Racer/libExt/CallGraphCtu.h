@@ -20,14 +20,15 @@
 //  edges to all externally available functions.
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_ANALYSIS_CALLGRAPH_H
-#define LLVM_CLANG_ANALYSIS_CALLGRAPH_H
+#ifndef LLVM_CLANG_ANALYSIS_CALLGRAPHCTU_H
+#define LLVM_CLANG_ANALYSIS_CALLGRAPHCTU_H
 
 #include "clang/AST/DeclBase.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/SetVector.h"
+#include "steengaardPAVisitor.h"
 #include <set>
 #include <map>
 
@@ -110,6 +111,8 @@ class CallGraphCtu : public RecursiveASTVisitor<CallGraphCtu> {
   /// This is a virtual root node that has edges to all the functions.
   CallGraphNode *Root;
 
+  SteengaardPAVisitor *PA;
+
 public:
   CallGraphCtu();
   ~CallGraphCtu();
@@ -121,7 +124,16 @@ public:
   void addToCallGraph(Decl *D) {
     TraverseDecl(D);
   }
-
+  
+  void setPA(SteengaardPAVisitor *pa)
+  {
+    PA=pa; 
+  }
+  SteengaardPAVisitor *getPA()
+  {
+    return PA;
+  } 
+ 
   void removeRootChild(CallGraphNode *child)
   {
     Root->deleteChild(child);

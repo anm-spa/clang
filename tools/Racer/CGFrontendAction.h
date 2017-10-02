@@ -6,7 +6,6 @@
 #ifndef LLVM_CLANG_CGFRONTENDACTION_H
 #define LLVM_CLANG_CGFRONTENDACTION_H
 
-
 #include "clang/Driver/Options.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -16,6 +15,8 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Tooling/Tooling.h"
 #include "libExt/CallGraphCtu.h"
+#include "steengaardPAVisitor.h"
+#include "symTabBuilder.h"
 
 using namespace std;
 using namespace clang;
@@ -26,12 +27,20 @@ using namespace llvm;
 class CGConsumer : public ASTConsumer {
 private:
   CallGraph &CG;
+  SteengaardPAVisitor *visitorPA; 
+  SymTabBuilderVisitor *visitorSymTab;
 public:
-  explicit CGConsumer(CompilerInstance *CI,CallGraph &g) : CG(g)
+  explicit CGConsumer(CompilerInstance *CI,CallGraph &g,std::string file) : CG(g), visitorPA(new SteengaardPAVisitor(CI,0,file)),visitorSymTab(new SymTabBuilderVisitor(CI,0))
   {}
 
   virtual void HandleTranslationUnit(ASTContext &Context) {     
+    //Perform pointer analysis first on this translation unit
+    visitorSymTab->TraverseDecl(Context.getTranslationUnitDecl());
+    //visitorSymTab->dumpSymTab();
+    visitorPA->initPA(visitorSymTab->getSymTab());
+    visitorPA->TraverseDecl(Context.getTranslationUnitDecl());
     TranslationUnitDecl *tu=Context.getTranslationUnitDecl();
+    CG.setPA(visitorPA); 
     CG.addToCallGraph(tu);
   }    
 };
@@ -45,7 +54,7 @@ public:
 
   virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(CompilerInstance &CI, StringRef file)   {
     llvm::errs()<<"Building Call Graph of "<<file.str()<<"\n"; 
-    return llvm::make_unique<CGConsumer>(&CI,_cg);
+    return llvm::make_unique<CGConsumer>(&CI,_cg,file.str());
   }
 
 ~CGFrontendAction(){
