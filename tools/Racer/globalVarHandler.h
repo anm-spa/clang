@@ -20,9 +20,12 @@ typedef enum {RD,WR,RW} AccessType;
 //.first is var represented as declared location, .second is location of access
 typedef std::set<std::pair<std::string,std::string> > VarsLoc;
 typedef std::set<std::pair<std::string,std::string> >::iterator VarsLocIter;
+//typedef std::set<std::tuple<std::string,std::string,std::string> > VarsLoc;
+//typedef std::set<std::tuple<std::string,std::string,std::string> >::iterator VarsLocIter;
 
 // maps program location to Var accessed and pointing to the global
-typedef std::map<std::string,std::pair<std::string,std::string> > MapType; 
+//typedef std::map<std::string,std::pair<std::string,std::string> > MapType; 
+typedef std::map<std::string,std::tuple<std::string,std::string,std::string> > MapType; 
 
 class GlobalVarHandler
 {
@@ -49,7 +52,7 @@ public:
   inline bool isGv(unsigned p){ return globalVarId.find(p)!=globalVarId.end();}
   void storeGlobalRead(const std::set<unsigned> &vars, std::string l);
   void storeGlobalWrite(const std::set<unsigned> &vars, std::string l);
-  void storeMapInfo(std::string loc,std::string vCurr, std::string vGlobal);
+  void storeMapInfo(std::string loc,std::string vCurr, std::string vGlobal,std::string funcLoc);
   inline VarsLoc getGlobalRead() { return globalRead; }
   inline VarsLoc getGlobalWrite() { return globalWrite;}
   inline VarsLocIter globalReadBegin(){ return globalRead.begin();}
@@ -60,6 +63,7 @@ public:
   void printGlobalRead();
   void printGlobalWrite();
   bool showVarAccessLoc(std::string loc, std::string accMod);
+  std::set<std::string> getFuncLocOfVarAccess(std::string loc);
 };
 
 #endif

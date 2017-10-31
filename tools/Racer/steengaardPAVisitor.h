@@ -21,6 +21,7 @@
 #include <algorithm>
 #include<map>
 #include <cassert>
+#include <tuple>
 
 using namespace std;
 using namespace clang;
@@ -33,8 +34,11 @@ private:
   SymTab<SymBase> *_symbTab;
   bool analPointers;                           
   FuncSignature * current_fs;
+  std::string currFuncStartLoc;
   bool isVisitingFunc;
   std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >  varMod; 
+  // varAccInfo: Location of Access, Var Id, Read/Write, FunctionLocation
+  std::multimap<clang::SourceLocation,std::tuple<unsigned,AccessType,std::string> > varAccInfo; 
   int debugLabel;
 public:
   explicit SteengaardPAVisitor(CompilerInstance *CI, int dl,std::string file) 

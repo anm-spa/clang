@@ -43,17 +43,26 @@ void SteengaardPAVisitor::showPAInfo(bool prIntrls)
 
 void SteengaardPAVisitor::recordVarAccess(clang::SourceLocation l, std::pair<unsigned,AccessType> acc)
 {
-  //errs()<<"Record:"<<l.printToString(astContext->getSourceManager());
+  typedef std::tuple<unsigned,AccessType,std::string> AccInfoType;
+  AccInfoType accInfo=std::make_tuple(acc.first,acc.second,currFuncStartLoc);
   varMod.insert(std::pair<clang::SourceLocation, std::pair<unsigned,AccessType> >(l,acc));
+  varAccInfo.insert(std::pair<clang::SourceLocation, AccInfoType>(l,accInfo));
 }
 
 void SteengaardPAVisitor::showVarReadWriteLoc()
 {
-  std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
-  for(;it!=varMod.end();it++)
+  //std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
+  std::multimap<clang::SourceLocation,std::tuple<unsigned,AccessType,std::string> >::iterator it=varAccInfo.begin();
+  for(;it!=varAccInfo.end();it++)
     {
-      std::string var=((_symbTab->lookupSymb(it->second.first))->getVarDecl())->getNameAsString();
-      std::string varAcc=it->second.second==RD ? "RD":(it->second.second==WR ? "WR": "RW");
+      unsigned varid; 
+      AccessType acc;
+      std::string funcLoc;
+      std::tie(varid,acc,funcLoc)=it->second;
+      //std::string var=((_symbTab->lookupSymb(it->second.first))->getVarDecl())->getNameAsString();
+      std::string var=((_symbTab->lookupSymb(varid))->getVarDecl())->getNameAsString();
+      std::string varAcc= (acc==RD ? "RD":(acc==WR ? "WR": "RW"));
+      //std::string varAcc=it->second.second==RD ? "RD":(it->second.second==WR ? "WR": "RW");
       errs()<<" Accessed Var "<<var<<" at "<<it->first.printToString(astContext->getSourceManager())<<" : "<<varAcc<<"\n";   
     }	  
 }
@@ -73,17 +82,17 @@ void SteengaardPAVisitor::storeGlobalPointers()
     
   //split pointers according to Read or Write access 
   // ForALL "var" accessed in the code (next msg)
-  std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
-  for(;it!=varMod.end();it++)
+  std::multimap<clang::SourceLocation,std::tuple<unsigned,AccessType,std::string > >::iterator it=varAccInfo.begin();
+  for(;it!=varAccInfo.end();it++)
     {
       clang::ValueDecl *val=NULL;
-      auto *sym=_symbTab->lookupSymb(it->second.first);
+      auto *sym=_symbTab->lookupSymb(std::get<0>(it->second));
       if(sym) val=sym->getVarDecl();
       
       //std::string varAsLoc=val->getLocation()->printToString(astContext->getSourceManager());
       
       // if "var" points to a global variable or itself a global
-      if(ptrToGlobals.find(it->second.first)!=ptrToGlobals.end() || gv.isGv(it->second.first))
+      if(ptrToGlobals.find(std::get<0>(it->second))!=ptrToGlobals.end() || gv.isGv(std::get<0>(it->second)))
 	{ 
 	  std::set<unsigned> vars_pointed_to;
 	  std::set<unsigned> intsect;
@@ -94,42 +103,110 @@ void SteengaardPAVisitor::storeGlobalPointers()
 	  if(val) vCurr=val->getNameAsString();
 	  else vCurr="You should not get this name";
 	  // get all "vars" that "var" points 
-	  pa->GetPointsToVars(it->second.first,&vars_pointed_to);
+	  pa->GetPointsToVars(std::get<0>(it->second),&vars_pointed_to);
 
 	  // if "var" is a global, insert it to "vars"
-	  if(gv.isGv(it->second.first))
-	    vars_pointed_to.insert(it->second.first);
+	  if(gv.isGv(std::get<0>(it->second)))
+	    vars_pointed_to.insert(std::get<0>(it->second));
 
 	  // Now take the intersection of "vars" and globals, which are the set of global vars that var points 
 	  std::set_intersection(vars_pointed_to.begin(), vars_pointed_to.end(),gv.gVarsBegin(),gv.gVarsEnd(), std::inserter(intsect,intsect.begin()));  
 
-	  if(it->second.second==RD) { 
+	  if(std::get<1>(it->second)==RD) { 
 	    
 	    // all globals at insect are read at loc
 	    gv.storeGlobalRead(intsect,loc);
 	    for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
 	      std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
 	      // all globals at insect are read at loc through "var"  
-	      gv.storeMapInfo(loc,vCurr,vGlobal);
+	      gv.storeMapInfo(loc,vCurr,vGlobal,std::get<2>(it->second));
 	    }   	 
 	  }
 	  else {
 	    gv.storeGlobalWrite(intsect,loc);
 	    for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
 	      std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
-	      gv.storeMapInfo(loc,vCurr,vGlobal);
+	      gv.storeMapInfo(loc,vCurr,vGlobal,std::get<2>(it->second));
 	    }  
 	  }
 	}     
     }    
 }
 
+// void SteengaardPAVisitor::storeGlobalPointers()
+// {
+//   buildPASet();
+//   std::set<unsigned> ptrToGlobals;
+//   for(SetIter it=gv.gVarsBegin();it!=gv.gVarsEnd();it++)
+//     { 
+//       std::set<unsigned> vars_pointed_to; 
+//       pa->GetPointedAtVar(*it,&vars_pointed_to);
+//       if(!vars_pointed_to.empty())
+// 	ptrToGlobals.insert(vars_pointed_to.begin(),vars_pointed_to.end());
+//       //gv.insertPtsToGv(vars_pointed_to,*it);    // check this method
+//     }
+    
+//   //split pointers according to Read or Write access 
+//   // ForALL "var" accessed in the code (next msg)
+//   std::multimap<clang::SourceLocation,std::pair<unsigned,AccessType> >::iterator it=varMod.begin();
+//   for(;it!=varMod.end();it++)
+//     {
+//       clang::ValueDecl *val=NULL;
+//       auto *sym=_symbTab->lookupSymb(it->second.first);
+//       if(sym) val=sym->getVarDecl();
+      
+//       //std::string varAsLoc=val->getLocation()->printToString(astContext->getSourceManager());
+      
+//       // if "var" points to a global variable or itself a global
+//       if(ptrToGlobals.find(it->second.first)!=ptrToGlobals.end() || gv.isGv(it->second.first))
+// 	{ 
+// 	  std::set<unsigned> vars_pointed_to;
+// 	  std::set<unsigned> intsect;
+	  
+// 	  // loc is the location where "var" is accessed, and "vCurr" is the variable name
+// 	  std::string loc=it->first.printToString(astContext->getSourceManager());
+// 	  std::string vCurr;
+// 	  if(val) vCurr=val->getNameAsString();
+// 	  else vCurr="You should not get this name";
+// 	  // get all "vars" that "var" points 
+// 	  pa->GetPointsToVars(it->second.first,&vars_pointed_to);
+
+// 	  // if "var" is a global, insert it to "vars"
+// 	  if(gv.isGv(it->second.first))
+// 	    vars_pointed_to.insert(it->second.first);
+
+// 	  // Now take the intersection of "vars" and globals, which are the set of global vars that var points 
+// 	  std::set_intersection(vars_pointed_to.begin(), vars_pointed_to.end(),gv.gVarsBegin(),gv.gVarsEnd(), std::inserter(intsect,intsect.begin()));  
+
+// 	  if(it->second.second==RD) { 
+	    
+// 	    // all globals at insect are read at loc
+// 	    gv.storeGlobalRead(intsect,loc);
+// 	    for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
+// 	      std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
+// 	      // all globals at insect are read at loc through "var"  
+// 	      gv.storeMapInfo(loc,vCurr,vGlobal);
+// 	    }   	 
+// 	  }
+// 	  else {
+// 	    gv.storeGlobalWrite(intsect,loc);
+// 	    for(std::set<unsigned>::iterator i=intsect.begin();i!=intsect.end();i++){
+// 	      std::string vGlobal=((_symbTab->lookupSymb(*i))->getVarDecl())->getNameAsString();
+// 	      gv.storeMapInfo(loc,vCurr,vGlobal);
+// 	    }  
+// 	  }
+// 	}     
+//     }    
+// }
+
+
 bool SteengaardPAVisitor::VisitFunctionDecl(FunctionDecl *func) {
-  //if(!astContext->getSourceManager().isInSystemHeader(func->getLocStart())){
-    current_fs=_symbTab->lookupfunc(func);
-    isVisitingFunc=true;
-    //}
-    return true;
+  if(!astContext) {exit(0);}
+  current_fs=_symbTab->lookupfunc(func);
+  // currFuncStartLoc=func->getSourceRange().getBegin().printToString(astContext->getSourceManager());
+  currFuncStartLoc=func->getNameInfo().getAsString();
+  isVisitingFunc=true;
+  return true;
 }
   
 std::pair<unsigned,PtrType> SteengaardPAVisitor::getExprIdandType(clang::Expr *exp)

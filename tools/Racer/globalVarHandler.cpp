@@ -27,6 +27,7 @@ for(SetIter i=vars.begin();i!=vars.end();i++)
   {
     std::string var=getVarAsLoc(*i);
     globalRead.insert(std::pair<std::string,std::string>(var,l)); 
+    //globalRead.insert(std::make_tuple(var,l,funcLoc)); 
   }
 }
 
@@ -35,13 +36,15 @@ void GlobalVarHandler::storeGlobalWrite(const std::set<unsigned> &vars, std::str
   for(SetIter i=vars.begin();i!=vars.end();i++){
     std::string var=getVarAsLoc(*i);
     globalWrite.insert(std::pair<std::string,std::string>(var,l)); 
+    //globalWrite.insert(std::make_tuple(var,l,funcLoc)); 
   }
 }
 
-void GlobalVarHandler::storeMapInfo(std::string loc,std::string vCurr, std::string vGlobal)
+void GlobalVarHandler::storeMapInfo(std::string loc,std::string vCurr, std::string vGlobal,std::string funcLoc)
 {
-  std::pair<std::string,std::string> vInfo=std::pair<std::string,std::string>(vCurr,vGlobal); 
-  locToVarPairMap.insert(std::pair< std::string,std::pair<std::string,std::string> >(loc,vInfo));
+  //std::pair<std::string,std::string> vInfo=std::pair<std::string,std::string>(vCurr,vGlobal); 
+  std::tuple<std::string,std::string,std::string> vInfo=std::make_tuple(vCurr,vGlobal,funcLoc); 
+  locToVarPairMap.insert(std::pair< std::string,std::tuple<std::string,std::string,std::string> >(loc,vInfo));
 }
 
 void GlobalVarHandler::showGlobals()
@@ -60,7 +63,8 @@ void GlobalVarHandler::printGlobalRead()
     {
       std::pair <MapType::iterator, MapType::iterator> range=locToVarPairMap.equal_range(I->second);
       for (MapType::iterator irange = range.first; irange != range.second; ++irange)
-	errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<I->second<<"\n"; 
+	//errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<I->second<<"\n"; 
+        errs()<< std::get<0>(irange->second) <<" accesses "<<std::get<1>(irange->second)<<" at "<<I->second<<" in "<<std::get<2>(irange->second)<<"\n"; 
     }
 }
 
@@ -72,7 +76,8 @@ void GlobalVarHandler::printGlobalWrite()
     {
       std::pair <MapType::iterator, MapType::iterator> range=locToVarPairMap.equal_range(I->second);
       for (MapType::iterator irange = range.first; irange != range.second; ++irange)
-	errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<I->second<<"\n"; 
+	//errs()<< irange->second.first <<" accesses "<<irange->second.second<<" at "<<I->second<<"\n"; 
+	errs()<< std::get<0>(irange->second) <<" accesses "<<std::get<1>(irange->second)<<" at "<<I->second<<" in "<<std::get<2>(irange->second)<<"\n";
     }
 }
 
@@ -82,10 +87,25 @@ bool GlobalVarHandler::showVarAccessLoc(std::string loc, std::string accMod)
   range = locToVarPairMap.equal_range(loc);
   if(range.first==locToVarPairMap.end()) return false;
   for (MapType::iterator irange = range.first; irange != range.second; ++irange)
-    errs()<<"["<<accMod<<", Loc:"<<loc<<"]:\t"<< irange->second.first <<"->"<<irange->second.second<<"\n";
-  return true;
+   {
+    errs()<<"["<<accMod<<", Loc:"<<loc<<"]:\t";
+    if(get<0>(irange->second)!=get<1>(irange->second))
+      errs()<<std::get<0>(irange->second) <<"->"<<std::get<1>(irange->second)<<" at "<<std::get<2>(irange->second)<<"\n";
+    else errs()<<std::get<0>(irange->second) <<" at "<<std::get<2>(irange->second)<<"\n";
+   }   
+   return true;
 }
 
 
+std::set<std::string> GlobalVarHandler:: getFuncLocOfVarAccess(std::string loc)
+{
+  std::set<std::string> Locs;
+  std::pair <MapType::iterator, MapType::iterator> range;
+  range = locToVarPairMap.equal_range(loc);
+  if(range.first==locToVarPairMap.end()) return Locs;
+  for (MapType::iterator irange = range.first; irange != range.second; ++irange)
+    Locs.insert(std::get<2>(irange->second));
+  return Locs;
+}
 
 

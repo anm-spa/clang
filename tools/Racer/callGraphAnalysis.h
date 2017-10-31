@@ -67,18 +67,18 @@ public:
       std::queue<CallGraphNode *> cgQ;
       cgQ.push(cgNode);
       while(!cgQ.empty())
-      {
-	CallGraphNode *currNode=cgQ.front();
-	cgQ.pop();
-	visited.insert(currNode);     
-	if(isnameOfNode(currNode,name)) return currNode;
-	for(auto it=currNode->begin();it!=currNode->end();it++)
-	  {
-	    if(visited.find(*it)==visited.end())
-	      cgQ.push(*it);
-	    parentOf.insert(std::make_pair(nameOfNode(*it), std::make_pair(nameOfNode(currNode),edgeL)));
-	  }  
-      }
+	{
+	  CallGraphNode *currNode=cgQ.front();
+	  cgQ.pop();
+	  visited.insert(currNode);     
+	  if(isnameOfNode(currNode,name)) return currNode;
+	  for(auto it=currNode->begin();it!=currNode->end();it++)
+	    {
+	      if(visited.find(*it)==visited.end())
+		cgQ.push(*it);
+	      parentOf.insert(std::make_pair(nameOfNode(*it), std::make_pair(nameOfNode(currNode),edgeL)));
+	    }  
+	}
       return NULL;
     }
 

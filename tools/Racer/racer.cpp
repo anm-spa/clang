@@ -15,7 +15,7 @@
 #include "symTabBuilder.h"
 #include "raceAnalysis.h"
 #include "headerDepAnalysis.h"
-#include "callGraphAnalysis.h"
+//#include "callGraphAnalysis.h"
 #include "CGFrontendAction.h"
 #include "commandOptions.h"
 #include <memory>
@@ -205,8 +205,33 @@ int main(int argc, const char **argv) {
 	errs()<<"Command Format Error, exactly two sources are required to run the command. See, e.g. racer --help\n";
 	return 0;	  
       }
+
+      // Call Graph Construction
+
+      ClangTool ToolCG(op.getCompilations(), op.getSourcePathList());
+      CallGraph cg;
+      std::vector<std::unique_ptr<clang::CompilerInstanceCtu> > vectCI;
+      CGFrontendFactory cgFact(cg,vectCI);
+      ToolCG.run(&cgFact);
+      cg.finishGraphConstruction();
+      cg.viewGraph();      
+      // Race Detection
       result = Tool.run(newFrontendActionFactory<RacerFrontendAction>().get());
+      racer->setCallGraph(&cg);
+      std::ofstream Method1(FUNC1.c_str()), Method2(FUNC2.c_str());
+      if (Method1.good() && Method2.good()) 
+	racer->setTaskStartPoint(FUNC1.c_str(),FUNC2.c_str());
       racer->extractPossibleRaces();
+      
+      // Finish compiler instances
+      for(auto it=vectCI.begin();it!=vectCI.end();it++)
+	{
+	  FrontendAction *fact=(*it)->getFrontendAction();
+	  if(CGFrontendAction *cgFrontend=static_cast<CGFrontendAction *>(fact)) 
+	    cgFrontend->EndFrontendAction();
+	  it->get()->EndCompilerActionOnSourceFile();
+	}
+
     }
 
    return result;
